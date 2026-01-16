@@ -10,8 +10,8 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 
 # ==================== ⚙️ إعدادات البوت والمفاتيح ⚙️ ====================
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" # توكن البوت
-ADMIN_ID = 123456789 # الأيدي الخاص بك
+BOT_TOKEN = "TOKEN" # توكن البوت
+ADMIN_ID =6318333901 # الأيدي الخاص بك
 CHANNEL_USER = "@YourChannel" # قناة الاشتراك الإجباري
 API_5SIM = "YOUR_5SIM_API_KEY" # مفتاح الموقع الروسي
 PAYEER_SECRET = "YOUR_PAYEER_SECRET" # مفتاح التاجر في بايير
@@ -19,7 +19,7 @@ SUPABASE_URL = "postgres://user:pass@db.supabase.co:5432/postgres" # رابط ا
 
 # إعدادات المحافظ اليدوية
 WALLETS = {
-    'vodafone': '010XXXXXXXX',
+    'vodafone': '01020755609',
     'stc': '05XXXXXXXX'
 }
 
@@ -203,7 +203,7 @@ def payeer_webhook():
     return "Error"
 
 # ==================== 🛒 الشراء من الموقع الروسي 🛒 ====================
-@bot.callback_query_handler(func=lambda call: call.data == "buy")
+@bot.callback_query_handler(func=23345678lambda call: call.data == "buy")
 def buy_menu(call):
     # مثال لدولة واحدة للتبسيط (مصر)
     markup = types.InlineKeyboardMarkup()
