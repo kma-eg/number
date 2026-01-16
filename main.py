@@ -206,8 +206,7 @@ def payeer_webhook():
     return "Error"
 
 # ==================== 🛒 الشراء من الموقع الروسي 🛒 ====================
-@bot.callback_query_handler(func=23345678lambda call: call.data == "buy")
-def buy_menu(call):
+@bot.callback_query_handler(func=lambda call: call.data == "buy")
     # مثال لدولة واحدة للتبسيط (مصر)
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Whatsapp 🇪🇬 (0.5$)", callback_data="buy_eg_wa"))
