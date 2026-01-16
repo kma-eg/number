@@ -12,7 +12,7 @@ from datetime import datetime
 
 # ==================== ⚙️ إعدادات البوت والمفاتيح ⚙️ ====================
 CHANNEL_USER = "@kma_c" # قناة الاشتراك الإجباري
-
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
 BOT_TOKEN = os.environ.get('TOKEN')
 ADMIN_ID = int(os.environ.get('ADMIN_ID')) # لازم نحوله لرقم int
 API_5SIM = os.environ.get('API_KEY') # سميها في ريندر API_KEY
