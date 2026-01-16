@@ -206,12 +206,13 @@ def payeer_webhook():
     return "Error"
 
 # ==================== 🛒 الشراء من الموقع الروسي 🛒 ====================
+# ✅ التصحيح (انسخ هذا واستبدل الجزء القديم)
 @bot.callback_query_handler(func=lambda call: call.data == "buy")
+def buy_menu(call):   # <--- هذا هو السطر الناقص
     # مثال لدولة واحدة للتبسيط (مصر)
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Whatsapp 🇪🇬 (0.5$)", callback_data="buy_eg_wa"))
+    markup.add(types.InlineKeyboardButton("Whatsapp EG (0.5$)", callback_data="buy_eg_wa"))
     bot.edit_message_text("اختر الخدمة:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-
 @bot.callback_query_handler(func=lambda call: call.data == "buy_eg_wa")
 def execute_buy(call):
     cid = call.message.chat.id
