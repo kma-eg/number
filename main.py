@@ -1,3 +1,4 @@
+import os
 import telebot
 from telebot import types
 import requests
@@ -10,10 +11,12 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 
 # ==================== ⚙️ إعدادات البوت والمفاتيح ⚙️ ====================
-BOT_TOKEN = "6058936352:AAFuc7sf304xcmRWkniHRIZNpV4oNglfTIk" # توكن البوت
-ADMIN_ID =6318333901 # الأيدي الخاص بك
 CHANNEL_USER = "@kma_c" # قناة الاشتراك الإجباري
-API_5SIM = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4MDAxMjk3MzIsImlhdCI6MTc2ODU5MzczMiwicmF5IjoiYjI1MDRmNzVlYzI2MTAzZmQ4MDVhNmZjNTU1OTNlMDgiLCJzdWIiOjM3NDE4NTl9.fChnApox83L626jS4ZajT1Sg0fEiYdqySUDJ9-AWEsNiHDJWv2hRaCk_MAtYJCa3nu1uo4HdTz-y4ug1EsAUbziQJncz5Q91Fh9ADt7LLgm8UyKzP4uFif5XY9rHpQ5zGiA8MN8HNIhtf-bHsJZxBNU0S8GT4VseKb1bbl3PEYB3H6IDSbH3csom0rWzYoySt9RPfOTuqJQlFk5T7TE_h4NjZhFvpt7_chzF2HQoLy0Js1esOyALhyX7D0xjCVet7df3CySYNn70sdJsPYRyEepetjsbq5lzHWg4zE4MOqB7_Q7iFPhQE_-t1v3J1yR1ARq9kMnzgH00I7cKcU0_Fg" # مفتاح الموقع الروسي
+
+BOT_TOKEN = os.environ.get('TOKEN')
+ADMIN_ID = int(os.environ.get('ADMIN_ID')) # لازم نحوله لرقم int
+API_5SIM = os.environ.get('API_KEY') # سميها في ريندر API_KEY
+
 PAYEER_SECRET = "YOUR_PAYEER_SECRET" # مفتاح التاجر في بايير
 SUPABASE_URL = "postgres://user:pass@db.supabase.co:5432/postgres" # رابط الداتابيز
 
