@@ -27,8 +27,8 @@ REFERRAL_REWARD = 0.02 # مكافأة الدعوة بالدولار
 # ==================== 2. إعدادات المحافظ (الجديدة) ====================
 WALLETS = {
     'vodafone': '01020755609',      # رقمك الأساسي
-    'vodafone2': '010XXXXXXXX',     # رقم إضافي للتجربة (عدله براحتك)
-    'usdt': 'Txxxxxxxxxxxxxxxxxxxxxx', # عنوان USDT تجريبي (TRC20)
+    'vodafone2': '01005016893',     # رقم إضافي للتجربة (عدله براحتك)
+    'usdt': 'TJuoPbUQepNx8SyUKNnxCU3ti4FeKZsZQx', # عنوان USDT تجريبي (TRC20)
     'payeer_manual': 'P1090134'     # محفظة بايير اليدوية
 }
 
