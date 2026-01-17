@@ -9,45 +9,57 @@ import random
 import string
 from flask import Flask, request
 
-# ==================== 1. إعدادات البيئة (من Render) ====================
-# تأكد أن هذه المتغيرات موجودة في Environment Variables في Render
+# ==================== 1. إعدادات البيئة ====================
 BOT_TOKEN = os.environ.get('TOKEN')
 ADMIN_ID = int(os.environ.get('ADMIN_ID'))
-API_KEY = os.environ.get('API_KEY') # مفتاح 5sim
-SUPABASE_URL = os.environ.get('SUPABASE_URL') # رابط قاعدة البيانات
+API_KEY = os.environ.get('API_KEY')
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
 
-# إعدادات القناة (التي سببت المشاكل سابقاً - تم تثبيتها الآن)
+# إعدادات القناة (مهم جداً)
 CHANNEL_ID = -1003316907453  # الآيدي الرقمي للقناة
-CHANNEL_LINK = "https://t.me/kma_c" # رابط القناة للأزرار
+CHANNEL_LINK = "https://t.me/kma_c" # رابط القناة
 
 # إعدادات الأرباح
-PROFIT_MARGIN = 1.30 # نسبة الربح (30%)
-REFERRAL_REWARD = 0.02 # مكافأة الدعوة بالدولار
+PROFIT_MARGIN = 1.30  # نسبة الربح (30%)
+REFERRAL_REWARD = 0.02 # مكافأة الدعوة
 
-# ==================== 2. إعدادات المحافظ (الجديدة) ====================
+# ==================== 2. بيانات المحافظ (تظهر للعميل) ====================
 WALLETS = {
-    'vodafone': '01020755609',      # رقمك الأساسي
-    'vodafone2': '01005016893',     # رقم إضافي للتجربة (عدله براحتك)
-    'usdt': 'TJuoPbUQepNx8SyUKNnxCU3ti4FeKZsZQx', # عنوان USDT تجريبي (TRC20)
-    'payeer_manual': 'P1090134'     # محفظة بايير اليدوية
+    'vodafone': '01020755609',
+    'vodafone2': '01005016893',
+    'payeer': 'P1090134',
+    'usdt': 'TJuoPbUQepNx8SyUKNnxCU3ti4FeKZsZQx' # (TRC20)
 }
 
-# ==================== 3. الاتصال بقاعدة البيانات ====================
+# ==================== 3. قوائم الدول والخدمات ====================
+COUNTRIES = {
+    'egypt': '🇪🇬 مصر', 'saudiarabia': '🇸🇦 السعودية', 'usa': '🇺🇸 أمريكا',
+    'russia': '🇷🇺 روسيا', 'china': '🇨🇳 الصين', 'morocco': '🇲🇦 المغرب',
+    'algeria': '🇩🇿 الجزائر', 'iraq': '🇮🇶 العراق', 'unitedkingdom': '🇬🇧 بريطانيا',
+    'brazil': '🇧🇷 البرازيل', 'germany': '🇩🇪 ألمانيا', 'france': '🇫🇷 فرنسا',
+    'yemen': '🇾🇪 اليمن'
+}
+
+SERVICES = {
+    'whatsapp': '💚 WhatsApp', 'telegram': '💙 Telegram', 'facebook': '💙 Facebook',
+    'instagram': '🩷 Instagram', 'tiktok': '🖤 TikTok', 'google': '❤️ Gmail',
+    'twitter': '🖤 X (Twitter)', 'snapchat': '💛 Snapchat'
+}
+
+# ==================== 4. الاتصال بقاعدة البيانات ====================
 def get_db_connection():
-    # دالة لفتح اتصال جديد في كل مرة لضمان عدم انقطاع الشبكة
     return psycopg2.connect(SUPABASE_URL)
 
 def init_db():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        # إنشاء جدول المستخدمين إذا لم يكن موجوداً
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 chat_id BIGINT PRIMARY KEY,
                 username TEXT,
                 balance FLOAT DEFAULT 0,
-                referrer_id BIGINT DEFAULT 0,
+                referrer_id BIGINT,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -58,29 +70,28 @@ def init_db():
     except Exception as e:
         print(f"❌ Database Error: {e}")
 
-init_db() # تشغيل عند البداية
+init_db()
 
-# ==================== 4. دوال إدارة المستخدمين والرصيد ====================
-def get_user(chat_id):
+# دوال التعامل مع القاعدة
+def add_user(chat_id, username, referrer_id=None):
+    conn = get_db_connection()
+    cur = conn.cursor()
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
-        user = cur.fetchone()
-        conn.close()
-        return user
-    except: return None
-
-def add_user(chat_id, username, referrer_id=0):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
         cur.execute("INSERT INTO users (chat_id, username, referrer_id) VALUES (%s, %s, %s)", (chat_id, username, referrer_id))
         conn.commit()
-        conn.close()
         return True
     except:
         return False
+    finally:
+        conn.close()
+
+def get_user(chat_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
+    res = cur.fetchone()
+    conn.close()
+    return res
 
 def update_balance(chat_id, amount):
     conn = get_db_connection()
@@ -89,179 +100,236 @@ def update_balance(chat_id, amount):
     conn.commit()
     conn.close()
 
-def get_balance(chat_id):
-    user = get_user(chat_id)
-    return user[2] if user else 0.0
-
 # ==================== 5. تشغيل البوت ====================
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
-user_captchas = {} # تخزين مؤقت للكابتشا
+user_captchas = {}
+user_selections = {} # لتخزين اختيارات الشراء المؤقتة
 
-# --- دوال مساعدة ---
+# --- الكابتشا ---
 def gen_captcha():
     a, b = random.randint(1, 9), random.randint(1, 9)
     return {'q': f"{a} + {b} = ?", 'a': str(a+b)}
 
-def check_sub(chat_id):
-    # دالة التحقق من الاشتراك (باستخدام الآيدي لتجنب الأخطاء)
-    try:
-        member = bot.get_chat_member(CHANNEL_ID, chat_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-    except Exception as e:
-        print(f"Sub Check Error: {e}") # طباعة الخطأ في اللوج للمراجعة
-        return False # لو حصل خطأ نعتبره غير مشترك احتياطياً
-    return False
-
-# ==================== 6. بداية البوت (/start) ====================
+# --- البداية /start ---
 @bot.message_handler(commands=['start'])
 def start_msg(message):
     cid = message.chat.id
     username = message.from_user.username
-    text_split = message.text.split()
     
-    # جلب معرف الإحالة لو موجود (/start 12345)
-    referrer_id = 0
-    if len(text_split) > 1 and text_split[1].isdigit():
-        ref_candidate = int(text_split[1])
-        if ref_candidate != cid: # عشان ما يعملش دعوة لنفسه
-            referrer_id = ref_candidate
-
-    # تسجيل المستخدم
-    is_new = add_user(cid, username, referrer_id)
-    if is_new:
-        bot.send_message(ADMIN_ID, f"🔔 **مستخدم جديد:** {username} (`{cid}`)", parse_mode="Markdown")
-        # لو فيه إحالة، نعطي المكافأة للموكل
-        if referrer_id != 0:
-            update_balance(referrer_id, REFERRAL_REWARD)
-            bot.send_message(referrer_id, f"🎉 قام شخص بالدخول عبر رابطك! تمت إضافة {REFERRAL_REWARD}$ لرصيدك.")
-
+    # التحقق من وجود كود دعوة (Referral)
+    args = message.text.split()
+    referrer_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else 0
+    if referrer_id == cid: referrer_id = 0 # منع دعوة النفس
+    
+    add_user(cid, username, referrer_id)
+    
     # إرسال الكابتشا
     captcha = gen_captcha()
     user_captchas[cid] = captcha['a']
-    bot.send_message(cid, f"🔒 **التحقق الأمني:**\n{captcha['q']}")
+    bot.send_message(cid, f"🔒 **التحقق الأمني**\n{captcha['q']}", parse_mode="Markdown")
 
 # --- التحقق من الكابتشا والاشتراك ---
 @bot.message_handler(func=lambda m: m.chat.id in user_captchas)
-def verify_captcha_func(message):
+def verify_captcha(message):
     cid = message.chat.id
     text = message.text
     
     if text.strip() == user_captchas[cid]:
         del user_captchas[cid]
-        # بعد الكابتشا، نتحقق من الاشتراك
-        check_sub_flow(cid)
+        check_sub_and_open_menu(cid)
     else:
-        bot.send_message(cid, "❌ كود خطأ، حاول مرة أخرى.")
+        bot.send_message(cid, "❌ إجابة خاطئة، حاول مرة أخرى.")
 
-def check_sub_flow(cid):
-    if check_sub(cid):
+def check_sub_and_open_menu(cid):
+    try:
+        # التحقق من الاشتراك باستخدام CHANNEL_ID الصحيح
+        stat = bot.get_chat_member(CHANNEL_ID, cid).status
+        if stat not in ['member', 'administrator', 'creator']:
+            raise Exception("Not Subscribed")
+            
+        # إذا مشترك، افتح القائمة
         main_menu(cid)
-    else:
+        
+    except Exception as e:
+        # إذا غير مشترك
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📢 اشترك في القناة", url=CHANNEL_LINK))
-        markup.add(types.InlineKeyboardButton("🔄 تحقق من الاشتراك", callback_data="check_sub_btn"))
+        markup.add(types.InlineKeyboardButton("🔄 تحقق من الاشتراك", callback_data="check_sub"))
         bot.send_message(cid, "⚠️ **يجب الاشتراك في القناة أولاً لاستخدام البوت!**", reply_markup=markup, parse_mode="Markdown")
 
-@bot.callback_query_handler(func=lambda call: call.data == "check_sub_btn")
-def recheck_sub(call):
-    if check_sub(call.message.chat.id):
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        main_menu(call.message.chat.id)
-    else:
-        bot.answer_callback_query(call.id, "❌ لم تشترك بعد!", show_alert=True)
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def check_sub_callback(call):
+    check_sub_and_open_menu(call.message.chat.id)
 
-# ==================== 7. القائمة الرئيسية ====================
+# ==================== 6. القوائم والتحكم (الجزء المفقود سابقاً) ====================
+
+# القائمة الرئيسية
 def main_menu(cid):
     user = get_user(cid)
     balance = user[2] if user else 0.0
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🛒 شراء أرقام", callback_data="buy_numbers"),
+        types.InlineKeyboardButton("🛒 شراء أرقام", callback_data="buy"),
         types.InlineKeyboardButton("💰 شحن رصيد", callback_data="deposit"),
         types.InlineKeyboardButton("👤 حسابي", callback_data="profile"),
-        types.InlineKeyboardButton("🎁 دعوة أصدقاء", callback_data="referral")
+        types.InlineKeyboardButton("🎁 دعوة أصدقاء", callback_data="invite")
     )
     if cid == ADMIN_ID:
         markup.add(types.InlineKeyboardButton("👮 لوحة الأدمن", callback_data="admin_panel"))
         
-    msg = f"👋 **أهلاً بك في بوت الأرقام**\n💰 رصيدك الحالي: `{balance:.2f}$`\n👇 اختر من القائمة:"
-    bot.send_message(cid, msg, reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(cid, f"👋 أهلاً بك! رصيدك الحالي: `{balance:.2f}$`\nاختر من القائمة:", reply_markup=markup, parse_mode="Markdown")
 
-# ==================== 8. نظام الشراء (العالمي) ====================
-COUNTRIES = {
-    'egypt': '🇪🇬 مصر', 'saudiarabia': '🇸🇦 السعودية', 'usa': '🇺🇸 أمريكا',
-    'russia': '🇷🇺 روسيا', 'china': '🇨🇳 الصين', 'morocco': '🇲🇦 المغرب'
-}
-SERVICES = {
-    'whatsapp': '💚 WhatsApp', 'telegram': '💙 Telegram', 'facebook': '💙 Facebook',
-    'instagram': '🩷 Instagram', 'google': '❤️ Gmail', 'tiktok': '🖤 TikTok'
-}
-user_selections = {}
+# --- زر شحن الرصيد ---
+@bot.callback_query_handler(func=lambda call: call.data == "deposit")
+def deposit_menu(call):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("Vodafone Cash 🇪🇬", callback_data="pay_info:vodafone"),
+        types.InlineKeyboardButton("USDT (TRC20) ₮", callback_data="pay_info:usdt"),
+        types.InlineKeyboardButton("Payeer 🅿️", callback_data="pay_info:payeer"),
+        types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu")
+    )
+    bot.edit_message_text("💳 **اختر وسيلة الدفع:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-@bot.callback_query_handler(func=lambda call: call.data == "buy_numbers")
-def show_countries(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith("pay_info:"))
+def pay_info_msg(call):
+    method = call.data.split(":")[1]
+    wallet = WALLETS.get(method, "غير متوفر")
+    
+    msg = f"💰 **الدفع عبر {method.upper()}**\n\n"
+    msg += f"1️⃣ حول المبلغ إلى: `{wallet}`\n"
+    if method == 'vodafone':
+        msg += f"أو الرقم البديل: `{WALLETS['vodafone2']}`\n"
+    msg += f"2️⃣ خذ سكرين شوت للتحويل.\n"
+    msg += f"3️⃣ أرسل الصورة هنا في الشات فوراً."
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="deposit"))
+    bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+# --- زر حسابي ---
+@bot.callback_query_handler(func=lambda call: call.data == "profile")
+def profile_show(call):
+    cid = call.message.chat.id
+    user = get_user(cid)
+    msg = f"👤 **ملفك الشخصي**\n🆔 ID: `{cid}`\n💰 الرصيد: `{user[2]}$`"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
+    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+# --- زر الدعوة ---
+@bot.callback_query_handler(func=lambda call: call.data == "invite")
+def invite_link(call):
+    cid = call.message.chat.id
+    bot_user = bot.get_me().username
+    link = f"https://t.me/{bot_user}?start={cid}"
+    msg = f"🎁 **اربح {REFERRAL_REWARD}$ مجاناً!**\nشارك الرابط مع أصدقائك:\n`{link}`"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
+    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+# --- استلام صور التحويل (للأدمن) ---
+@bot.message_handler(content_types=['photo'])
+def handle_receipt(message):
+    cid = message.chat.id
+    # إرسال الصورة للأدمن
+    bot.forward_message(ADMIN_ID, cid, message.message_id)
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ 1$", callback_data=f"add:{cid}:1"),
+        types.InlineKeyboardButton("✅ 5$", callback_data=f"add:{cid}:5"),
+        types.InlineKeyboardButton("✅ 10$", callback_data=f"add:{cid}:10"),
+        types.InlineKeyboardButton("❌ رفض", callback_data=f"rej:{cid}")
+    )
+    bot.send_message(ADMIN_ID, f"📩 إيصال جديد من `{cid}`\nاختر المبلغ لإضافته:", reply_markup=markup)
+    bot.reply_to(message, "✅ تم استلام الإيصال، سيتم مراجعته وإضافة الرصيد قريباً.")
+
+# --- معالجة قبول/رفض الأدمن ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("add:") or call.data.startswith("rej:"))
+def admin_process_payment(call):
+    if call.from_user.id != ADMIN_ID: return
+    
+    action, uid, val = call.data.split(":")[0], call.data.split(":")[1], 0
+    if len(call.data.split(":")) > 2: val = float(call.data.split(":")[2])
+    
+    if action == "add":
+        update_balance(uid, val)
+        bot.send_message(uid, f"🎉 تم شحن رصيدك بنجاح: {val}$")
+        bot.edit_message_text(f"✅ تم إضافة {val}$ للمستخدم {uid}", call.message.chat.id, call.message.message_id)
+    else:
+        bot.send_message(uid, "❌ تم رفض عملية الشحن. تأكد من الإيصال.")
+        bot.edit_message_text(f"❌ تم رفض الطلب للمستخدم {uid}", call.message.chat.id, call.message.message_id)
+
+# ==================== 7. نظام الشراء (العالمي) ====================
+@bot.callback_query_handler(func=lambda call: call.data == "buy")
+def buy_countries(call):
     markup = types.InlineKeyboardMarkup(row_width=3)
-    btns = [types.InlineKeyboardButton(name, callback_data=f"ct:{code}") for code, name in COUNTRIES.items()]
+    btns = [types.InlineKeyboardButton(n, callback_data=f"cnt:{k}") for k, n in COUNTRIES.items()]
     markup.add(*btns)
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu_back"))
-    bot.edit_message_text("🌍 **اختر الدولة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
+    bot.edit_message_text("🌍 اختر الدولة:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("ct:"))
-def show_services(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cnt:"))
+def buy_services(call):
     country = call.data.split(":")[1]
-    user_selections[call.from_user.id] = {'country': country}
+    user_selections[call.from_user.id] = country
     
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btns = [types.InlineKeyboardButton(name, callback_data=f"srv:{code}") for code, name in SERVICES.items()]
+    btns = [types.InlineKeyboardButton(n, callback_data=f"srv:{k}") for k, n in SERVICES.items()]
     markup.add(*btns)
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="buy_numbers"))
-    bot.edit_message_text(f"تم اختيار: {COUNTRIES[country]}\n👇 **اختر الخدمة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="buy"))
+    bot.edit_message_text(f"تم اختيار {COUNTRIES.get(country)}\n👇 اختر الخدمة:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("srv:"))
 def execute_buy(call):
     cid = call.message.chat.id
     service = call.data.split(":")[1]
-    selection = user_selections.get(call.from_user.id)
-    if not selection: return
-    country = selection['country']
+    country = user_selections.get(cid)
     
-    # سعر تقريبي (يمكنك ربطه بالـ API لجلب السعر الحقيقي)
+    if not country:
+        bot.answer_callback_query(call.id, "حدث خطأ، ابدأ من جديد")
+        return
+
+    # سعر تقريبي (يمكنك ربطه بالـ API للحصول على السعر الدقيق)
     cost = 0.5 
+    user_bal = get_user(cid)[2]
     
-    if get_balance(cid) >= cost:
-        update_balance(cid, -cost)
-        bot.send_message(cid, "🔄 جاري طلب الرقم...")
+    if user_bal < cost:
+        bot.answer_callback_query(call.id, "❌ رصيدك غير كافي!", show_alert=True)
+        return
         
-        # طلب من API
+    # خصم الرصيد مبدئياً
+    update_balance(cid, -cost)
+    bot.send_message(cid, "🔄 جاري طلب الرقم...")
+    
+    try:
         headers = {'Authorization': 'Bearer ' + API_KEY, 'Accept': 'application/json'}
-        try:
-            url = f'https://5sim.net/v1/user/buy/activation/{country}/any/{service}'
-            r = requests.get(url, headers=headers)
-            if r.status_code == 200:
-                data = r.json()
-                if 'phone' in data:
-                    phone = data['phone']
-                    oid = data['id']
-                    bot.send_message(cid, f"✅ **تم الشراء!**\n📱: `{phone}`\n⏳ انتظر الكود...", parse_mode="Markdown")
-                    threading.Thread(target=check_sms, args=(cid, oid, headers)).start()
-                else:
-                    update_balance(cid, cost)
-                    bot.send_message(cid, "⚠️ لا توجد أرقام متاحة، تم استرداد الرصيد.")
+        url = f'https://5sim.net/v1/user/buy/activation/{country}/any/{service}'
+        r = requests.get(url, headers=headers)
+        
+        if r.status_code == 200:
+            data = r.json()
+            if 'phone' in data:
+                phone = data['phone']
+                oid = data['id']
+                bot.send_message(cid, f"✅ **تم شراء الرقم!**\n📱 `{phone}`\n⏳ انتظر الكود...", parse_mode="Markdown")
+                threading.Thread(target=check_sms, args=(cid, oid, headers)).start()
             else:
                 update_balance(cid, cost)
-                bot.send_message(cid, f"⚠️ خطأ من المصدر: {r.text}")
-        except Exception as e:
+                bot.send_message(cid, "⚠️ لا توجد أرقام متاحة، تم استرداد الرصيد.")
+        else:
             update_balance(cid, cost)
-            bot.send_message(cid, f"خطأ: {e}")
-    else:
-        bot.answer_callback_query(call.id, "❌ رصيدك غير كافي!", show_alert=True)
+            bot.send_message(cid, f"❌ خطأ من المصدر: {r.text}")
+            
+    except Exception as e:
+        update_balance(cid, cost)
+        bot.send_message(cid, f"Error: {e}")
 
 def check_sms(cid, oid, headers):
-    # محاولة لمدة دقيقتين ونصف
-    for _ in range(30):
+    for _ in range(30): # محاولة لمدة دقيقتين ونصف
         time.sleep(5)
         try:
             r = requests.get(f'https://5sim.net/v1/user/check/{oid}', headers=headers)
@@ -270,25 +338,20 @@ def check_sms(cid, oid, headers):
                 code = data['sms'][0]['code']
                 bot.send_message(cid, f"📬 **وصل الكود!**\nCode: `{code}`", parse_mode="Markdown")
                 return
-        except:
-            pass
-            
+        except: pass
     bot.send_message(cid, "⏰ انتهى الوقت ولم يصل الكود.", parse_mode="Markdown")
 
-# ==================== 7. تشغيل السيرفر والبوت ====================
+# ==================== 8. تشغيل السيرفر ====================
 @app.route('/')
 def home():
-    return "Bot is Running!"
+    return "Bot is Running V3.0!"
 
 def run_flask():
-    # تشغيل سيرفر Flask لاستقبال الـ Webhooks
     app.run(host='0.0.0.0', port=5000)
 
 if __name__ == "__main__":
-    # تشغيل السيرفر في خيط منفصل
     t = threading.Thread(target=run_flask)
     t.start()
     
-    # تشغيل البوت
     print("🤖 Bot started...")
     bot.infinity_polling(skip_pending=True)
