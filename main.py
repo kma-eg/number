@@ -260,10 +260,35 @@ def execute_buy(call):
         bot.answer_callback_query(call.id, "❌ رصيدك غير كافي!", show_alert=True)
 
 def check_sms(cid, oid, headers):
-    for _ in range(30): # محاولة لمدة دقيقتين ونصف
+    # محاولة لمدة دقيقتين ونصف
+    for _ in range(30):
         time.sleep(5)
         try:
             r = requests.get(f'https://5sim.net/v1/user/check/{oid}', headers=headers)
             data = r.json()
             if data['status'] == 'RECEIVED':
-        
+                code = data['sms'][0]['code']
+                bot.send_message(cid, f"📬 **وصل الكود!**\nCode: `{code}`", parse_mode="Markdown")
+                return
+        except:
+            pass
+            
+    bot.send_message(cid, "⏰ انتهى الوقت ولم يصل الكود.", parse_mode="Markdown")
+
+# ==================== 7. تشغيل السيرفر والبوت ====================
+@app.route('/')
+def home():
+    return "Bot is Running!"
+
+def run_flask():
+    # تشغيل سيرفر Flask لاستقبال الـ Webhooks
+    app.run(host='0.0.0.0', port=5000)
+
+if __name__ == "__main__":
+    # تشغيل السيرفر في خيط منفصل
+    t = threading.Thread(target=run_flask)
+    t.start()
+    
+    # تشغيل البوت
+    print("🤖 Bot started...")
+    bot.infinity_polling(skip_pending=True)
