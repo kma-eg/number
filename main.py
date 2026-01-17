@@ -17,15 +17,15 @@ API_KEY = os.environ.get('API_KEY') # مفتاح 5sim
 SUPABASE_URL = os.environ.get('SUPABASE_URL') # رابط الداتابيز المعدل (%40)
 
 # إعدادات القناة والربح
-CHANNEL_USER = "@YourChannel" # غير هذا لمعرف قناتك
+CHANNEL_USER = "@kma_c" # غير هذا لمعرف قناتك
 PROFIT_MARGIN = 1.30 # نسبة الربح 30%
-REFERRAL_REWARD = 0.05 # مكافأة الإحالة (دولار)
+REFERRAL_REWARD = 0.02 # مكافأة الإحالة (دولار)
 
 # محافظ الدفع اليدوي
 WALLETS = {
-    'vodafone': '010xxxxxxxxx',
-    'stc': '05xxxxxxxxx',
-    'payeer_manual': 'P10xxxxxx'
+    'vodafone': '01020755609',
+    'stc': '01005016893',
+    'payeer_manual': 'P1090134'
 }
 
 # قوائم الدول والخدمات (السوق العالمي)
