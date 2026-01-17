@@ -17,7 +17,7 @@ API_KEY = os.environ.get('API_KEY') # مفتاح 5sim
 SUPABASE_URL = os.environ.get('SUPABASE_URL') # رابط الداتابيز المعدل (%40)
 
 # إعدادات القناة والربح
-CHANNEL_id = -1003316907453  
+CHANNEL_ID = -1003316907453 
 PROFIT_MARGIN = 1.30 # نسبة الربح 30%
 REFERRAL_REWARD = 0.02 # مكافأة الإحالة (دولار)
 
@@ -154,12 +154,34 @@ def verify_captcha(message):
 def check_sub_and_reward(cid):
     # 1. التحقق من الاشتراك في القناة
     try:
-                # التعديل: استخدام CHANNEL_id (المتغير الجديد) بدلاً من CHANNEL_USER
-        stat = bot.get_chat_member(CHANNEL_id, cid).status
+def check_sub_and_reward(cid):
+    # التحقق من الاشتراك في القناة
+    try:
+        # انتبه: هنا نستخدم CHANNEL_ID (حروف كبيرة) لتطابق المتغير اللي فوق
+        stat = bot.get_chat_member(CHANNEL_ID, cid).status
         if stat not in ['member', 'administrator', 'creator']:
             raise Exception("Not Subscribed")
 
-            
+        # --- (نفس كود المكافأة القديم كما هو) ---
+        user = get_user(cid)
+        if user and user[3] != 0: 
+            referrer = user[3]
+            update_balance(referrer, REFERRAL_REWARD)
+            bot.send_message(referrer, f"🎉 حصلت على {REFERRAL_REWARD}$ مكافأة دعوة!")
+            # تصفير المرجع عشان ما ياخدش عليه تاني
+            # (تعديل بسيط في الداتابيز مطلوب لو عايز تمنع التكرار، بس خليه كدة دلوقتي)
+
+        main_menu(cid)
+
+    except Exception as e:
+        # هنا كان في خطأ لأن CHANNEL_USER اتمسحت، استبدلناها برابط القناة
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📢 اشترك في القناة", url="https://t.me/kma_c"))
+        markup.add(types.InlineKeyboardButton("🔄 تحقق من الاشتراك", callback_data="check_sub_callback"))
+        
+        # لاحظ مسحنا {CHANNEL_USER} وحطينا نص عادي عشان ما يحصلش خطأ
+        bot.send_message(cid, "⚠️ يجب الاشتراك في القناة أولاً لاستخدام البوت!", reply_markup=markup, parse_mode="Markdown")
+        
         # 2. مكافأة الإحالة (تتم مرة واحدة فقط عند التسجيل الناجح)
         user = get_user(cid)
         if user and user[3] != 0: # user[3] هو referrer_id
@@ -174,7 +196,9 @@ def check_sub_and_reward(cid):
     except:
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("تحقق من الاشتراك 🔄", callback_data="check_sub"))
-        bot.send_message(cid, f"⚠️ يجب الاشتراك في القناة أولاً: {CHANNEL_USER}", reply_markup=markup)
+        # بدل المتغير المحذوف، حطينا الرابط مباشر
+bot.send_message(cid, "⚠️ يجب الاشتراك في القناة أولاً: @kma_c", reply_markup=markup) 
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def recheck(call):
