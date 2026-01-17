@@ -17,7 +17,7 @@ API_KEY = os.environ.get('API_KEY') # مفتاح 5sim
 SUPABASE_URL = os.environ.get('SUPABASE_URL') # رابط الداتابيز المعدل (%40)
 
 # إعدادات القناة والربح
-CHANNEL_USER = "@kma_c" # غير هذا لمعرف قناتك
+CHANNEL_id = -1003316907453  
 PROFIT_MARGIN = 1.30 # نسبة الربح 30%
 REFERRAL_REWARD = 0.02 # مكافأة الإحالة (دولار)
 
@@ -154,9 +154,11 @@ def verify_captcha(message):
 def check_sub_and_reward(cid):
     # 1. التحقق من الاشتراك في القناة
     try:
-        status = bot.get_chat_member(CHANNEL_USER, cid).status
-        if status not in ['member', 'administrator', 'creator']:
+                # التعديل: استخدام CHANNEL_id (المتغير الجديد) بدلاً من CHANNEL_USER
+        stat = bot.get_chat_member(CHANNEL_id, cid).status
+        if stat not in ['member', 'administrator', 'creator']:
             raise Exception("Not Subscribed")
+
             
         # 2. مكافأة الإحالة (تتم مرة واحدة فقط عند التسجيل الناجح)
         user = get_user(cid)
