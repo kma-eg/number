@@ -10,10 +10,10 @@ import string
 
 # ==================== 1. إعدادات البوت والمفاتيح ====================
 # ⚠️ استبدل البيانات التالية ببياناتك الحقيقية
-BOT_TOKEN = "ضع_توكن_البوت_هنا" 
-ADMIN_ID = 1234567890 # رقم الآيدي الخاص بك
-API_KEY = "ضع_مفتاح_5sim_هنا"
-SUPABASE_URL = "ضع_رابط_Supabase_هنا"
+BOT_TOKEN = "6058936352:AAFNKPjfj5A4qMYlyE-KPhBx_BUjSNlbYy0" 
+ADMIN_ID = 6318333901 # رقم الآيدي الخاص بك
+API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4MDAxMjk3MzIsImlhdCI6MTc2ODU5MzczMiwicmF5IjoiYjI1MDRmNzVlYzI2MTAzZmQ4MDVhNmZjNTU1OTNlMDgiLCJzdWIiOjM3NDE4NTl9.fChnApox83L626jS4ZajT1Sg0fEiYdqySUDJ9-AWEsNiHDJWv2hRaCk_MAtYJCa3nu1uo4HdTz-y4ug1EsAUbziQJncz5Q91Fh9ADt7LLgm8UyKzP4uFif5XY9rHpQ5zGiA8MN8HNIhtf-bHsJZxBNU0S8GT4VseKb1bbl3PEYB3H6IDSbH3csom0rWzYoySt9RPfOTuqJQlFk5T7TE_h4NjZhFvpt7_chzF2HQoLy0Js1esOyALhyX7D0xjCVet7df3CySYNn70sdJsPYRyEepetjsbq5lzHWg4zE4MOqB7_Q7iFPhQE_-t1v3J1yR1ARq9kMnzgH00I7cKcU0_Fg"
+SUPABASE_URL = "postgresql://postgres:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 
 # إعدادات القناة
 CHANNEL_ID = -1003316907453  
