@@ -2,25 +2,26 @@
 import telebot
 from telebot import types
 import requests
-import psycopg2
+import sqlite3  # ✅ تم التغيير لاستخدام قاعدة بيانات محلية
 import threading
 import time
 import random
 import string
 
 # ==================== 1. إعدادات البوت والمفاتيح ====================
-# ⚠️ استبدل البيانات التالية ببياناتك الحقيقية
+# ⚠️ البيانات دي من ملفك اللي رفعته (جاهزة)
 BOT_TOKEN = "6058936352:AAFNKPjfj5A4qMYlyE-KPhBx_BUjSNlbYy0" 
 ADMIN_ID = 6318333901 # رقم الآيدي الخاص بك
 API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4MDAxMjk3MzIsImlhdCI6MTc2ODU5MzczMiwicmF5IjoiYjI1MDRmNzVlYzI2MTAzZmQ4MDVhNmZjNTU1OTNlMDgiLCJzdWIiOjM3NDE4NTl9.fChnApox83L626jS4ZajT1Sg0fEiYdqySUDJ9-AWEsNiHDJWv2hRaCk_MAtYJCa3nu1uo4HdTz-y4ug1EsAUbziQJncz5Q91Fh9ADt7LLgm8UyKzP4uFif5XY9rHpQ5zGiA8MN8HNIhtf-bHsJZxBNU0S8GT4VseKb1bbl3PEYB3H6IDSbH3csom0rWzYoySt9RPfOTuqJQlFk5T7TE_h4NjZhFvpt7_chzF2HQoLy0Js1esOyALhyX7D0xjCVet7df3CySYNn70sdJsPYRyEepetjsbq5lzHWg4zE4MOqB7_Q7iFPhQE_-t1v3J1yR1ARq9kMnzgH00I7cKcU0_Fg"
-SUPABASE_URL = "postgresql://postgres:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+
+# (تم إزالة رابط Supabase لأننا سنستخدم ملف محلي)
 
 # إعدادات القناة
 CHANNEL_ID = -1003316907453  
 CHANNEL_LINK = "https://t.me/kma_c"
 REFERRAL_REWARD = 0.02 
 
-# ==================== 2. المحافظ (تم تحديثها) ====================
+# ==================== 2. المحافظ ====================
 WALLETS = {
     'vodafone': '01020755609',
     'vodafone2': '01005016893',
@@ -31,7 +32,7 @@ WALLETS = {
 
 # ==================== 3. القوائم والخدمات ====================
 COUNTRIES = {
-    'canada': '🇨🇦 كندا (Koho)', # كندا في المقدمة
+    'canada': '🇨🇦 كندا (Koho)', 
     'egypt': '🇪🇬 مصر', 'saudiarabia': '🇸🇦 السعودية', 'usa': '🇺🇸 أمريكا',
     'russia': '🇷🇺 روسيا', 'brazil': '🇧🇷 البرازيل', 'morocco': '🇲🇦 المغرب',
     'algeria': '🇩🇿 الجزائر', 'iraq': '🇮🇶 العراق', 'unitedkingdom': '🇬🇧 بريطانيا',
@@ -39,33 +40,38 @@ COUNTRIES = {
 }
 
 SERVICES = {
-    'other': '🏦 Koho / Bank (Other)', # الخدمة الخاصة بـ Koho
+    'other': '🏦 Koho / Bank (Other)', 
     'whatsapp': '💚 WhatsApp', 'telegram': '💙 Telegram',
     'facebook': '💙 Facebook', 'instagram': '🩷 Instagram',
     'tiktok': '🖤 TikTok', 'google': '❤️ Gmail',
     'twitter': '🖤 X (Twitter)', 'snapchat': '💛 Snapchat'
 }
 
-# ==================== 4. قاعدة البيانات (Supabase) ====================
+# ==================== 4. قاعدة البيانات (SQLite المحلية) ====================
+DB_NAME = "bot_database.db" # اسم الملف اللي هيتحفظ فيه البيانات
+
 def get_db_connection():
-    return psycopg2.connect(SUPABASE_URL)
+    # الاتصال بملف محلي
+    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
+    return conn
 
 def init_db():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        # إنشاء الجدول (SQL متوافق مع SQLite)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                chat_id BIGINT PRIMARY KEY,
+                chat_id INTEGER PRIMARY KEY,
                 username TEXT,
-                balance FLOAT DEFAULT 0,
-                referrer_id BIGINT,
+                balance REAL DEFAULT 0,
+                referrer_id INTEGER,
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            )
         """)
         conn.commit()
         conn.close()
-        print("✅ Database Connected")
+        print("✅ Local Database Connected (bot_database.db)")
     except Exception as e:
         print(f"❌ Database Error: {e}")
 
@@ -75,7 +81,8 @@ def add_user(chat_id, username, referrer_id=None):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("INSERT INTO users (chat_id, username, referrer_id) VALUES (%s, %s, %s)", (chat_id, username, referrer_id))
+        # ⚠️ في SQLite نستخدم ? بدل %s
+        cur.execute("INSERT INTO users (chat_id, username, referrer_id) VALUES (?, ?, ?)", (chat_id, username, referrer_id))
         conn.commit()
         return True
     except: return False
@@ -84,7 +91,7 @@ def add_user(chat_id, username, referrer_id=None):
 def get_user(chat_id):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
+    cur.execute("SELECT * FROM users WHERE chat_id = ?", (chat_id,))
     res = cur.fetchone()
     conn.close()
     return res
@@ -92,7 +99,7 @@ def get_user(chat_id):
 def update_balance(chat_id, amount):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET balance = balance + %s WHERE chat_id = %s", (amount, chat_id))
+    cur.execute("UPDATE users SET balance = balance + ? WHERE chat_id = ?", (amount, chat_id))
     conn.commit()
     conn.close()
 
@@ -157,7 +164,7 @@ def main_menu(cid):
     )
     if cid == ADMIN_ID:
         markup.add(types.InlineKeyboardButton("👮 لوحة الأدمن", callback_data="admin_panel"))
-    # نص نظيف
+    
     bot.send_message(cid, f"👋 أهلاً بك! رصيدك الحالي: {balance:.2f}$\nاختر من القائمة:", reply_markup=markup)
 
 # --- شحن الرصيد (الخطوة 1: اختيار المبلغ) ---
@@ -285,7 +292,7 @@ def execute_buy(call):
     
     if not country: return bot.answer_callback_query(call.id, "خطأ، حاول مجدداً")
     
-    cost = 0.5
+    cost = 0.5 
     user_bal = get_user(cid)[2]
     
     if user_bal < cost:
@@ -308,70 +315,4 @@ def execute_buy(call):
                 threading.Thread(target=check_sms, args=(cid, oid, headers, country, service)).start()
             else:
                 update_balance(cid, cost)
-                bot.send_message(cid, "⚠️ لا توجد أرقام، تم استرداد الرصيد")
-        else:
-            update_balance(cid, cost)
-            bot.send_message(cid, f"❌ خطأ: {r.text}")
-    except Exception as e:
-        update_balance(cid, cost)
-        bot.send_message(cid, f"Error: {e}")
-
-def check_sms(cid, oid, headers, country, service):
-    for _ in range(36): 
-        time.sleep(5)
-        try:
-            r = requests.get(f'https://5sim.net/v1/user/check/{oid}', headers=headers)
-            data = r.json()
-            if data['status'] == 'RECEIVED':
-                code = data['sms'][0]['code']
-                phone = data['phone']
-                bot.send_message(cid, f"📬 وصل الكود\nCode: {code}")
-                try:
-                    masked = phone[:-4] + "****"
-                    msg_ch = f"✅ تفعيل جديد ناجح 🚀\n\n🌍 {COUNTRIES.get(country)}\n📱 {SERVICES.get(service)}\n📞 {masked}"
-                    markup = types.InlineKeyboardMarkup()
-                    bot_url = f"https://t.me/{bot.get_me().username}"
-                    markup.add(types.InlineKeyboardButton("🤖 اطلب رقمك الآن", url=bot_url))
-                    bot.send_message(CHANNEL_ID, msg_ch, reply_markup=markup)
-                except: pass
-                return
-            elif data['status'] in ['CANCELED', 'TIMEOUT']:
-                bot.send_message(cid, "❌ تم الإلغاء أو انتهاء الوقت")
-                return
-        except: pass
-    bot.send_message(cid, "⏰ انتهى الوقت ولم يصل الكود")
-
-# --- باقي الأزرار ---
-@bot.callback_query_handler(func=lambda call: call.data == "profile")
-def profile_show(call):
-    cid = call.message.chat.id
-    user = get_user(cid)
-    msg = f"👤 ملفك الشخصي\n🆔 ID: {cid}\n💰 الرصيد: {user[2]}$"
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
-    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data == "invite")
-def invite_link(call):
-    cid = call.message.chat.id
-    bot_user = bot.get_me().username
-    link = f"https://t.me/{bot_user}?start={cid}"
-    msg = f"🎁 اربح {REFERRAL_REWARD}$ مجاناً\nشارك رابطك:\n{link}"
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
-    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data == "admin_panel")
-def admin_menu_func(call):
-    if call.from_user.id != ADMIN_ID: return
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
-    bot.edit_message_text("👮 لوحة التحكم", call.message.chat.id, call.message.message_id, reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data == "main_menu")
-def back_main(call):
-    main_menu(call.message.chat.id)
-
-# ==================== 8. التشغيل ====================
-print("🤖 Bot Started (Core Version)...")
-bot.infinity_polling(skip_pending=True)
+                bot.
