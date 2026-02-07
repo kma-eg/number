@@ -460,5 +460,85 @@ def admin_menu_func(call):
     )
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-# وظائف الأدمن (إذاعة، شحن، خصم)
-@bot.callback_
+# وظائف الأدمن (إذاعة، شحن، خصم)@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_"))
+def admin_actions(call):
+    if call.from_user.id != ADMIN_ID: return
+    action = call.data.split("_")[1]
+    
+    cid = call.message.chat.id
+    if action == "broadcast":
+        msg = bot.send_message(cid, "📢 **أرسل الرسالة التي تريد إذاعتها:**\n(يمكنك إرسال نص، صورة، أو توجيه رسالة)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_broadcast)
+    
+    elif action == "add":
+        msg = bot.send_message(cid, "💰 **شحن رصيد يدوي**\nأرسل: `الآيدي المبلغ`\nمثال: `123456789 5`", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_manual_add)
+        
+    elif action == "sub":
+        msg = bot.send_message(cid, "🛑 **خصم رصيد يدوي**\nأرسل: `الآيدي المبلغ`\nمثال: `123456789 5`", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_manual_sub)
+
+def process_broadcast(message):
+    if message.text == "إلغاء": 
+        bot.reply_to(message, "تم الإلغاء.")
+        return
+
+    # جلب جميع المستخدمين لإرسال الرسالة
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT chat_id FROM users")
+    ids = cur.fetchall()
+    conn.close()
+    
+    bot.reply_to(message, f"🚀 جاري الإرسال لـ {len(ids)} مستخدم...")
+    
+    count = 0
+    for (uid,) in ids:
+        try:
+            bot.copy_message(uid, message.chat.id, message.message_id)
+            count += 1
+            time.sleep(0.05) # تأخير بسيط لتجنب الحظر من تيليجرام
+        except Exception as e: 
+            pass # تخطي المستخدمين اللي حاظرين البوت
+    
+    bot.reply_to(message, f"✅ تمت الإذاعة بنجاح لـ {count} مستخدم.")
+
+def process_manual_add(message):
+    try:
+        args = message.text.split()
+        uid = int(args[0])
+        amount = float(args[1])
+        update_balance(uid, amount)
+        bot.reply_to(message, f"✅ تم شحن {amount}$ للمستخدم {uid} بنجاح.")
+        try: 
+            bot.send_message(uid, f"🎁 **إشعار إداري**\nتم إضافة {amount}$ إلى رصيدك بواسطة الإدارة.")
+        except: pass
+    except:
+        bot.reply_to(message, "❌ تنسيق خاطئ! تأكد من كتابة الآيدي ثم مسافة ثم المبلغ.")
+
+def process_manual_sub(message):
+    try:
+        args = message.text.split()
+        uid = int(args[0])
+        amount = float(args[1])
+        # التأكد من أن الرصيد يكفي قبل الخصم (اختياري)
+        update_balance(uid, -amount)
+        bot.reply_to(message, f"✅ تم خصم {amount}$ من المستخدم {uid} بنجاح.")
+    except:
+        bot.reply_to(message, "❌ تنسيق خاطئ! تأكد من كتابة الآيدي ثم مسافة ثم المبلغ.")
+
+# ==================== 9. التشغيل النهائي ====================
+if __name__ == "__main__":
+    # تشغيل سيرفر Flask في خيط منفصل (عشان Render يفضل شغال)
+    t = threading.Thread(target=run_web_server)
+    t.start()
+    
+    print("🤖 Bot is executing...")
+    
+    # حلقة التشغيل اللانهائية للبوت
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True)
+        except Exception as e:
+            print(f"⚠️ Error detected: {e}")
+            time.sleep(5)
