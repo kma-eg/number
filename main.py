@@ -185,7 +185,7 @@ def main_menu(cid, msg_id=None):
     if cid == ADMIN_ID:
         markup.add(types.InlineKeyboardButton("👮 لوحة الأدمن", callback_data="admin_panel"))
     
-    text = f"👋 **أهلاً بك!**\n💰 رصيدك: `{bal:.2f}$`\nاختر خدمتك:"
+    text = f"👋أهلاً بك!\n💰 رصيدك: `{bal:.2f}$`\nاختر خدمتك:"
     if msg_id: bot.edit_message_text(text, cid, msg_id, reply_markup=markup, parse_mode="Markdown")
     else: bot.send_message(cid, text, reply_markup=markup, parse_mode="Markdown")
 
@@ -198,7 +198,7 @@ def deposit_region(call):
         types.InlineKeyboardButton("🌍 أنا خارج مصر", callback_data="dep_loc:global"),
         types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu")
     )
-    bot.edit_message_text("🌍 **حدد موقعك لعرض طرق الدفع المتاحة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text("🌍 حدد موقعك لعرض طرق الدفع المتاحة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("dep_loc:"))
 def deposit_methods(call):
@@ -218,7 +218,7 @@ def deposit_methods(call):
         markup.add(types.InlineKeyboardButton("USDT (TRC20)", callback_data="dep_pay:trc20"))
         
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="deposit_start"))
-    bot.edit_message_text("💰 **اختر وسيلة الدفع:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text("💰 اختر وسيلة الدفع:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("dep_pay:"))
 def deposit_details(call):
@@ -228,24 +228,24 @@ def deposit_details(call):
     msg = ""
     # رسالة فودافون كاش (تظهر بالمصري)
     if method == "vf":
-        msg = (f"🇪🇬 **شحن فودافون كاش**\n\n"
+        msg = (f"🇪🇬 شحن فودافون كاش\n\n"
                f"📱 رقم المحفظة: `{WALLETS['vodafone']}`\n"
-               f"💵 سعر الصرف: **1$ = {int(DEPOSIT_RATE)} جنيه**\n\n"
-               f"⚠️ **تعليمات هامة:**\n"
+               f"💵 سعر الصرف 1$ = {int(DEPOSIT_RATE)} جنيه**\n\n"
+               f"⚠️ تعليمات هامة:\n"
                f"1. حول المبلغ المطلوب بالضبط.\n"
                f"2. أرسل صورة الإيصال هنا ليتم إضافة الرصيد.")
     
     # رسائل الكريبتو (تظهر بالدولار فقط)
     elif method == "binance":
-        msg = (f"🔶 **شحن Binance Pay**\n\n"
+        msg = (f"🔶 شحن Binance Pay\n\n"
                f"🆔 Pay ID: `{WALLETS['binance_id']}`\n\n"
                f"📸 أرسل صورة العملية هنا.")
     elif method == "bybit":
-        msg = (f"⚫ **شحن Bybit Pay**\n\n"
+        msg = (f"⚫ شحن Bybit Pay\n\n"
                f"🆔 UID: `{WALLETS['bybit_id']}`\n\n"
                f"📸 أرسل صورة التحويل هنا.")
     elif method == "trc20":
-        msg = (f"🕸 **شحن USDT (TRC20)**\n\n"
+        msg = (f"🕸 شحن USDT (TRC20)\n\n"
                f"🔗 العنوان: `{WALLETS['usdt_address']}`\n\n"
                f"📸 أرسل صورة التحويل (TXID) هنا.")
 
@@ -268,8 +268,8 @@ def handle_deposit_proof(message):
         types.InlineKeyboardButton("✅ 10$", callback_data=f"adm_dep:{cid}:10"),
         types.InlineKeyboardButton("❌ رفض", callback_data=f"adm_rej:{cid}")
     )
-    bot.send_message(ADMIN_ID, f"📩 **إيصال إيداع من:** `{cid}`", reply_markup=markup, parse_mode="Markdown")
-    bot.reply_to(message, "✅ **تم استلام الإيصال!**\nجاري المراجعة، سيصلك إشعار قريباً.")
+    bot.send_message(ADMIN_ID, f"📩 إيصال إيداع من: `{cid}`", reply_markup=markup, parse_mode="Markdown")
+    bot.reply_to(message, "✅ تم استلام الإيصال!\nجاري المراجعة، سيصلك إشعار قريباً.")
 
 # ==================== 5. نظام السحب (Withdraw) - الجديد ====================
 @bot.callback_query_handler(func=lambda call: call.data == "withdraw_start")
@@ -282,7 +282,7 @@ def withdraw_menu(call):
     markup.add(types.InlineKeyboardButton("Bybit (USDT)", callback_data="wd_mtd:bybit"))
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
     
-    bot.edit_message_text("🏦 **سحب الرصيد**\nاختر وسيلة السحب:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text("🏦 سحب الرصيد\nاختر وسيلة السحب:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("wd_mtd:"))
 def withdraw_amount_ask(call):
@@ -290,7 +290,7 @@ def withdraw_amount_ask(call):
     cid = call.message.chat.id
     user_data_cache[cid] = {'method': method}
     
-    msg = bot.send_message(cid, f"💰 **كم تريد أن تسحب؟**\n(أقل مبلغ: {MIN_WITHDRAW}$)\nأرسل المبلغ فقط (رقم):")
+    msg = bot.send_message(cid, f"💰 كم تريد أن تسحب؟\n(أقل مبلغ: {MIN_WITHDRAW}$)\nأرسل المبلغ فقط (رقم):")
     bot.register_next_step_handler(msg, process_withdraw_amount)
 
 def process_withdraw_amount(message):
@@ -314,13 +314,13 @@ def process_withdraw_amount(message):
         extra_txt = ""
         if method == "vf":
             egp_val = int(amount * WITHDRAW_RATE)
-            extra_txt = f"\n💵 ستستلم: **{egp_val} جنيه** (سعر الصرف {int(WITHDRAW_RATE)})"
+            extra_txt = f"\n💵 ستستلم: {egp_val} جنيه (سعر الصرف {int(WITHDRAW_RATE)})"
             prompt = "📱 أرسل رقم محفظة فودافون كاش:"
         else:
-            extra_txt = f"\n💵 ستستلم: **{amount} USDT**"
+            extra_txt = f"\n💵 ستستلم: {amount} USDT"
             prompt = "🆔 أرسل الـ ID أو عنوان المحفظة:"
             
-        msg = bot.send_message(cid, f"✅ المبلغ: {amount}${extra_txt}\n\n{prompt}\n\n⚠️ **تنبيه هام:** تأكد من الرقم/العنوان جيداً. لا يوجد استرداد للأموال في حالة الخطأ!")
+        msg = bot.send_message(cid, f"✅ المبلغ: {amount}${extra_txt}\n\n{prompt}\n\n⚠️ تنبيه هام:** تأكد من الرقم/العنوان جيداً. لا يوجد استرداد للأموال في حالة الخطأ!")
         bot.register_next_step_handler(msg, process_withdraw_confirm)
         
     except ValueError:
@@ -348,7 +348,7 @@ def process_withdraw_confirm(message):
         types.InlineKeyboardButton("❌ رفض وإرجاع الرصيد", callback_data=f"wd_no:{cid}:{amount}")
     )
     
-    log = (f"📤 **طلب سحب جديد**\n"
+    log = (f"📤 طلب سحب جديد\n"
            f"👤 العضو: `{cid}`\n"
            f"💰 المبلغ: `{amount}$`\n"
            f"🏦 الوسيلة: {method_name}\n"
@@ -356,7 +356,7 @@ def process_withdraw_confirm(message):
            f"📝 العنوان/الرقم: `{wallet_info}`")
            
     bot.send_message(ADMIN_ID, log, reply_markup=admin_markup, parse_mode="Markdown")
-    bot.send_message(cid, "✅ **تم استلام طلب السحب.**\nسيتم المراجعة والتحويل قريباً.")
+    bot.send_message(cid, "✅ تم استلام طلب السحب.\nسيتم المراجعة والتحويل قريباً.")
 
 # ==================== 6. معالجة قرارات الأدمن ====================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_") or call.data.startswith("wd_"))
@@ -368,26 +368,26 @@ def admin_decisions(call):
     if "adm_dep" in action:
         _, uid, amt = action.split(":")
         update_balance(int(uid), float(amt))
-        bot.send_message(int(uid), f"✅ **تم قبول الإيداع!**\n💰 رصيدك الحالي زاد: {amt}$")
+        bot.send_message(int(uid), f"✅ تم قبول الإيداع!\n💰 رصيدك الحالي زاد: {amt}$")
         bot.edit_message_text(f"✅ تم شحن {amt}$ لـ {uid}", call.message.chat.id, call.message.message_id)
         
     # رفض الإيداع
     elif "adm_rej" in action:
         uid = int(action.split(":")[1])
-        bot.send_message(uid, "❌ **تم رفض الإيداع.**\nالبيانات غير مطابقة.")
+        bot.send_message(uid, "❌ تم رفض الإيداع.\nالبيانات غير مطابقة.")
         bot.edit_message_text(f"❌ تم الرفض لـ {uid}", call.message.chat.id, call.message.message_id)
 
     # قبول السحب
     elif "wd_ok" in action:
         _, uid, amt = action.split(":")
-        bot.send_message(int(uid), f"✅ **تم تنفيذ السحب بنجاح!**\nتم تحويل المبلغ إليك.")
+        bot.send_message(int(uid), f"✅ تم تنفيذ السحب بنجاح!\nتم تحويل المبلغ إليك.")
         bot.edit_message_text(f"✅ تم تأكيد السحب لـ {uid}", call.message.chat.id, call.message.message_id)
 
     # رفض السحب (إرجاع الرصيد)
     elif "wd_no" in action:
         _, uid, amt = action.split(":")
         update_balance(int(uid), float(amt)) # إرجاع الرصيد
-        bot.send_message(int(uid), f"❌ **تم رفض طلب السحب.**\nتم إعادة {amt}$ إلى رصيدك بالبوت.")
+        bot.send_message(int(uid), f"❌ تم رفض طلب السحب.\nتم إعادة {amt}$ إلى رصيدك بالبوت.")
         bot.edit_message_text(f"❌ تم رفض السحب وإرجاع الرصيد لـ {uid}", call.message.chat.id, call.message.message_id)
 
 # ==================== 7. حسابي (Profile) ====================
@@ -402,7 +402,7 @@ def show_profile(call):
     join_date = user[4]
     invites = get_referrals_count(cid)
     
-    msg = (f"👤 **حسابي**\n\n"
+    msg = (f"👤 حسابي\n\n"
            f"🆔 ID: `{cid}`\n"
            f"💰 الرصيد: `{bal:.2f}$`\n"
            f"👥 الدعوات: `{invites} صديق`\n"
@@ -426,7 +426,7 @@ def admin_panel_menu(call):
     users = stats[0]
     money = stats[1] if stats[1] else 0.0
     
-    msg = (f"👮 **لوحة التحكم**\n"
+    msg = (f"👮 لوحة التحكم\n"
            f"👥 المستخدمين: `{users}`\n"
            f"💰 إجمالي الأرصدة: `{money:.2f}$`")
            
@@ -445,13 +445,13 @@ def admin_actions(call):
     cid = call.message.chat.id
     
     if act == "bc":
-        m = bot.send_message(cid, "📢 **أرسل الرسالة للإذاعة:**\n(أرسل 'إلغاء' للتراجع)")
+        m = bot.send_message(cid, "📢 أرسل الرسالة للإذاعة:\n(أرسل 'إلغاء' للتراجع)")
         bot.register_next_step_handler(m, do_broadcast)
     elif act == "add":
-        m = bot.send_message(cid, "➕ **شحن يدوي**\nأرسل: `الآيدي المبلغ`\nمثال: `12345 10`")
+        m = bot.send_message(cid, "➕ شحن يدوي\nأرسل: `الآيدي المبلغ`\nمثال: `12345 10`")
         bot.register_next_step_handler(m, do_manual_add)
     elif act == "sub":
-        m = bot.send_message(cid, "➖ **خصم يدوي**\nأرسل: `الآيدي المبلغ`\nمثال: `12345 5`")
+        m = bot.send_message(cid, "➖ خصم يدوي\nأرسل: `الآيدي المبلغ`\nمثال: `12345 5`")
         bot.register_next_step_handler(m, do_manual_sub)
 
 def do_broadcast(message):
@@ -478,7 +478,7 @@ def do_manual_add(message):
         update_balance(u, a)
         bot.reply_to(message, f"✅ تم شحن {a}$ للمستخدم {u} بنجاح.")
         try:
-            bot.send_message(u, f"🎁 **تم إضافة {a}$ لرصيدك من الإدارة.**")
+            bot.send_message(u, f"🎁 تم إضافة {a}$ لرصيدك من الإدارة.")
         except: pass
     except:
         bot.reply_to(message, "❌ خطأ في التنسيق. مثال: `12345 10`")
@@ -514,7 +514,7 @@ def buy_menu(call):
     btns = [types.InlineKeyboardButton(n, callback_data=f"cnt:{k}") for k, n in COUNTRIES.items()]
     markup.add(*btns)
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
-    bot.edit_message_text("🌍 **اختر الدولة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text("🌍 اختر الدولة:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("cnt:"))
 def buy_srv(call):
@@ -524,7 +524,7 @@ def buy_srv(call):
     for k, n in SERVICES.items():
         markup.add(types.InlineKeyboardButton(n, callback_data=f"srv:{k}"))
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="buy"))
-    bot.edit_message_text(f"👇 **اختر الخدمة لـ {COUNTRIES[c]}:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text(f"👇 اختر الخدمة لـ {COUNTRIES[c]}:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("srv:"))
 def do_buy(call):
@@ -541,13 +541,13 @@ def do_buy(call):
     # هنا يتم وضع كود الشراء الفعلي من 5sim
     # حالياً سنقوم بخصم وهمي للتجربة
     update_balance(cid, -cost)
-    bot.send_message(cid, f"✅ **تم استلام طلبك!**\nجاري جلب رقم {SERVICES[srv]} من دولة {COUNTRIES[cnt]}...\n(سيتم استكمال كود الـ API هنا)")
+    bot.send_message(cid, f"✅ تم استلام طلبك!\nجاري جلب رقم {SERVICES[srv]} من دولة {COUNTRIES[cnt]}...\n(سيتم استكمال كود الـ API هنا)")
 
 @bot.callback_query_handler(func=lambda call: call.data == "invite")
 def invite_link(call):
     cid = call.message.chat.id
     link = f"https://t.me/{bot.get_me().username}?start={cid}"
-    msg = f"🎁 **شارك الرابط واربح!**\nاحصل على {REFERRAL_REWARD}$ لكل صديق يسجل من خلالك:\n\n`{link}`"
+    msg = f"🎁 شارك الرابط واربح!\nاحصل على {REFERRAL_REWARD}$ لكل صديق يسجل من خلالك:\n\n`{link}`"
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
     bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
