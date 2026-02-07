@@ -15,7 +15,8 @@ API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE4MDAxMjk3MzIsImlhdCI6
 ADMIN_ID = 6318333901
 
 # رابط قاعدة البيانات (Supabase - للحفاظ على الرصيد في Render)
-SUPABASE_URL = "postgresql://postgres:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+SUPABASE_URL = "postgresql://postgres.rjialktdutmbuqhaznzu:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+
 
 # ==================== 2. إعدادات القنوات (التقسيمة الجديدة) ====================
 # 1. قناة الاشتراك الإجباري (القديمة)
