@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 import telebot
 from telebot import types
@@ -470,6 +471,100 @@ def do_broadcast(message):
 
 def do_manual_add(message):
     try:
-        u, a = message.text.split()
-        update_balance(int(u), float(a))
-        bot.reply_to(message, "✅ تم 
+        args = message.text.split()
+        if len(args) < 2: raise ValueError
+        u = int(args[0])
+        a = float(args[1])
+        update_balance(u, a)
+        bot.reply_to(message, f"✅ تم شحن {a}$ للمستخدم {u} بنجاح.")
+        try:
+            bot.send_message(u, f"🎁 **تم إضافة {a}$ لرصيدك من الإدارة.**")
+        except: pass
+    except:
+        bot.reply_to(message, "❌ خطأ في التنسيق. مثال: `12345 10`")
+
+def do_manual_sub(message):
+    try:
+        args = message.text.split()
+        if len(args) < 2: raise ValueError
+        u = int(args[0])
+        a = float(args[1])
+        update_balance(u, -a)
+        bot.reply_to(message, f"✅ تم خصم {a}$ من المستخدم {u} بنجاح.")
+    except:
+        bot.reply_to(message, "❌ خطأ في التنسيق. مثال: `12345 5`")
+
+# ==================== 9. الشراء (نظام 5sim) ====================
+COUNTRIES = {
+    'canada': '🇨🇦 كندا (Koho)', 'egypt': '🇪🇬 مصر', 'saudiarabia': '🇸🇦 السعودية',
+    'usa': '🇺🇸 أمريكا', 'russia': '🇷🇺 روسيا', 'brazil': '🇧🇷 البرازيل',
+    'morocco': '🇲🇦 المغرب', 'algeria': '🇩🇿 الجزائر', 'iraq': '🇮🇶 العراق',
+    'unitedkingdom': '🇬🇧 بريطانيا', 'germany': '🇩🇪 ألمانيا', 'france': '🇫🇷 فرنسا',
+    'yemen': '🇾🇪 اليمن'
+}
+SERVICES = {
+    'other': '🏦 Koho/Bank', 'whatsapp': '💚 WhatsApp', 'telegram': '💙 Telegram',
+    'facebook': '💙 Facebook', 'instagram': '🩷 Instagram', 'tiktok': '🖤 TikTok',
+    'google': '❤️ Gmail', 'twitter': '🖤 X (Twitter)'
+}
+
+@bot.callback_query_handler(func=lambda call: call.data == "buy")
+def buy_menu(call):
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    btns = [types.InlineKeyboardButton(n, callback_data=f"cnt:{k}") for k, n in COUNTRIES.items()]
+    markup.add(*btns)
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
+    bot.edit_message_text("🌍 **اختر الدولة:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cnt:"))
+def buy_srv(call):
+    c = call.data.split(":")[1]
+    user_selections[call.from_user.id] = c
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for k, n in SERVICES.items():
+        markup.add(types.InlineKeyboardButton(n, callback_data=f"srv:{k}"))
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="buy"))
+    bot.edit_message_text(f"👇 **اختر الخدمة لـ {COUNTRIES[c]}:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("srv:"))
+def do_buy(call):
+    cid = call.message.chat.id
+    srv = call.data.split(":")[1]
+    cnt = user_selections.get(cid)
+    
+    # تحقق من الرصيد (تكلفة افتراضية)
+    cost = 0.5
+    user = get_user(cid)
+    if not user or user[2] < cost: 
+        return bot.answer_callback_query(call.id, "❌ رصيدك غير كافي!", show_alert=True)
+    
+    # هنا يتم وضع كود الشراء الفعلي من 5sim
+    # حالياً سنقوم بخصم وهمي للتجربة
+    update_balance(cid, -cost)
+    bot.send_message(cid, f"✅ **تم استلام طلبك!**\nجاري جلب رقم {SERVICES[srv]} من دولة {COUNTRIES[cnt]}...\n(سيتم استكمال كود الـ API هنا)")
+
+@bot.callback_query_handler(func=lambda call: call.data == "invite")
+def invite_link(call):
+    cid = call.message.chat.id
+    link = f"https://t.me/{bot.get_me().username}?start={cid}"
+    msg = f"🎁 **شارك الرابط واربح!**\nاحصل على {REFERRAL_REWARD}$ لكل صديق يسجل من خلالك:\n\n`{link}`"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
+    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+# ==================== 10. التشغيل النهائي ====================
+if __name__ == "__main__":
+    init_db()
+    # تشغيل سيرفر Flask في خيط منفصل (عشان Render يفضل شغال)
+    t = threading.Thread(target=run_web_server)
+    t.start()
+    
+    print("🤖 Bot is Live and Running...")
+    
+    # حلقة التشغيل اللانهائية
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True)
+        except Exception as e:
+            print(f"⚠️ Error: {e}")
+            time.sleep(5)
