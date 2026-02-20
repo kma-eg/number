@@ -8,6 +8,7 @@ import time
 import random
 import string
 import os
+import re
 from flask import Flask
 
 # ==================== 1. إعدادات البوت والمفاتيح ====================
@@ -26,18 +27,9 @@ LOG_CHANNEL_LINK = "https://t.me/kms_ad"
 
 # الثوابت المالية
 REFERRAL_REWARD = 0.02  # مكافأة الدعوة (دولار)
-USD_EGP_RATE = 50.0     # سعر الدولار 
 GMAIL_PRICE = 1.0       # سعر الجيميل الدائم (تعدله براحتك)
 
-# ==================== 2. المحافظ ====================
-WALLETS = {
-    'vodafone': '01020755609',
-    'vodafone2': '01005016893',
-    'binance_id': '566079884',
-    'bybit_id': '250000893'
-}
-
-# ==================== 3. سيرفر Flask (لـ Render) ====================
+# ==================== 2. سيرفر Flask (لـ Render) ====================
 app = Flask(__name__)
 @app.route('/')
 def home(): return "Temp Mail Bot is Running! 🚀"
@@ -45,7 +37,7 @@ def run_web_server():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
 
-# ==================== 4. قاعدة البيانات ====================
+# ==================== 3. قاعدة البيانات ====================
 def get_db_connection(): return psycopg2.connect(SUPABASE_URL)
 
 def init_db():
@@ -110,15 +102,20 @@ def update_balance(chat_id, amount):
     conn.commit()
     conn.close()
 
-# ==================== 5. الكابتشا المعقدة ومنطق البداية ====================
+# ==================== 4. كابتشا وتشفير الإثباتات ====================
 bot = telebot.TeleBot(BOT_TOKEN)
 user_captchas = {}
-active_temp_mails = {} # لتخزين الإيميل المؤقت النشط لكل مستخدم
+active_temp_mails = {} # لتخزين الإيميل المؤقت النشط والوقت لكل مستخدم
 
 def gen_complex_captcha():
     chars = string.ascii_letters + string.digits + "@#$&*?!"
     return ''.join(random.choice(chars) for _ in range(6))
 
+def mask_string(s, visible_start=2, visible_end=2):
+    if len(s) <= visible_start + visible_end: return s
+    return s[:visible_start] + "*" * (len(s) - visible_start - visible_end) + s[-visible_end:]
+
+# ==================== 5. منطق البداية والقائمة ====================
 @bot.message_handler(commands=['start'])
 def start_msg(message):
     cid = message.chat.id
@@ -175,7 +172,6 @@ def main_menu(cid):
         types.InlineKeyboardButton("🆓 توليد إيميل مؤقت", callback_data="gen_temp"),
         types.InlineKeyboardButton("📥 صندوق الوارد", callback_data="check_inbox"),
         types.InlineKeyboardButton("💎 شراء Gmail (دائم)", callback_data="buy_gmail"),
-        types.InlineKeyboardButton("💰 شحن رصيد", callback_data="deposit_select_amount"),
         types.InlineKeyboardButton("👤 حسابي", callback_data="profile"),
         types.InlineKeyboardButton("🎁 دعوة أصدقاء", callback_data="invite"),
         types.InlineKeyboardButton("✅ قناة التفعيلات", url=LOG_CHANNEL_LINK)
@@ -183,15 +179,27 @@ def main_menu(cid):
     if cid == ADMIN_ID: markup.add(types.InlineKeyboardButton("👮 لوحة الأدمن", callback_data="admin_panel"))
     bot.send_message(cid, f"👋 **أهلاً بك في بوت الخدمات الذكية!**\n💰 رصيدك: `{balance:.2f}$`\nاختر من القائمة:", reply_markup=markup, parse_mode="Markdown")
 
-# ==================== 6. الإيميلات المؤقتة (مجاني) ====================
+# ==================== 6. الإيميلات المؤقتة (15 دقيقة) ====================
 @bot.callback_query_handler(func=lambda call: call.data == "gen_temp")
 def generate_temp_email(call):
     cid = call.message.chat.id
+    current_time = time.time()
+    
+    # التحقق من مرور 15 دقيقة
+    if cid in active_temp_mails:
+        last_gen_time = active_temp_mails[cid].get('time', 0)
+        time_diff = current_time - last_gen_time
+        if time_diff < 900:  # 900 ثانية = 15 دقيقة
+            mins_left = int((900 - time_diff) // 60)
+            return bot.answer_callback_query(call.id, f"⏳ الإيميل المؤقت صالح لمدة 15 دقيقة. يرجى الانتظار {mins_left} دقيقة لتوليد إيميل جديد.", show_alert=True)
+
     bot.edit_message_text("🔄 جاري إنشاء إيميل مؤقت...", cid, call.message.message_id)
     try:
         r = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1")
         email = r.json()[0]
-        active_temp_mails[cid] = email
+        
+        # حفظ الإيميل والوقت
+        active_temp_mails[cid] = {'email': email, 'time': current_time}
         
         # حفظ في قاعدة البيانات (السجل)
         conn = get_db_connection()
@@ -200,14 +208,8 @@ def generate_temp_email(call):
         conn.commit()
         conn.close()
 
-        # إرسال إشعار للقناة
-        masked = email[:3] + "****" + email[email.find("@"):]
-        markup_ch = types.InlineKeyboardMarkup()
-        markup_ch.add(types.InlineKeyboardButton("🤖 احصل على إيميلك الآن", url=f"https://t.me/{bot.get_me().username}"))
-        bot.send_message(LOG_CHANNEL_ID, f"✅ **توليد إيميل جديد!** 🚀\n✉️ `{masked}`\n✨ مجاناً عبر بوتنا!", reply_markup=markup_ch, parse_mode="Markdown")
-
         # رسالة للمستخدم
-        msg = f"✅ **تم إنشاء الإيميل المؤقت بنجاح!**\n\n✉️ الإيميل:\n`{email}`\n\n⚠️ استخدمه للتسجيل في المواقع، ثم اضغط على (صندوق الوارد) لرؤية رمز التحقق."
+        msg = f"✅ **تم إنشاء الإيميل المؤقت بنجاح!**\n\n✉️ الإيميل:\n`{email}`\n\n⚠️ صالح لمدة 15 دقيقة، استخدمه للتسجيل ثم اضغط (صندوق الوارد)."
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📥 فحص صندوق الوارد", callback_data="check_inbox"))
         markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
@@ -218,12 +220,15 @@ def generate_temp_email(call):
 @bot.callback_query_handler(func=lambda call: call.data == "check_inbox")
 def check_temp_inbox(call):
     cid = call.message.chat.id
-    email = active_temp_mails.get(cid)
-    if not email:
+    temp_data = active_temp_mails.get(cid)
+    
+    if not temp_data:
         return bot.answer_callback_query(call.id, "❌ لم تقم بإنشاء إيميل مؤقت بعد!", show_alert=True)
     
+    email = temp_data['email']
     bot.answer_callback_query(call.id, "🔄 جاري تحديث الصندوق...")
     login, domain = email.split('@')
+    
     try:
         r = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}")
         messages = r.json()
@@ -234,22 +239,40 @@ def check_temp_inbox(call):
             markup.add(types.InlineKeyboardButton("🔙 القائمة", callback_data="main_menu"))
             bot.edit_message_text(f"✉️ **صندوق الوارد:** `{email}`\n\n📭 الصندوق فارغ حالياً، انتظر قليلاً ثم حدث.", cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
-            # نجلب آخر رسالة فقط للتبسيط
             msg_id = messages[0]['id']
             r_msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}")
             msg_data = r_msg.json()
             subject = msg_data.get('subject', 'بدون عنوان')
             text_body = msg_data.get('textBody', 'لا يوجد نص')
             
+            # محاولة استخراج كود التفعيل للإثباتات
+            code_match = re.search(r'\b\d{4,6}\b', text_body)
+            code = code_match.group(0) if code_match else None
+            
+            # إرسال إثبات مشفر للقناة إذا تم العثور على كود
+            if code:
+                masked_email = mask_string(login, 2, 1) + "@" + domain
+                masked_code = mask_string(code, 1, 1)
+                
+                proof_msg = f"🔥 **تم استلام كود تفعيل جديد!**\n\n📧 الإيميل: `{masked_email}`\n🔐 الكود: `{masked_code}`\n\n✨ البوت الأسرع والأفضل للخدمات 🚀"
+                markup_ch = types.InlineKeyboardMarkup()
+                try:
+                    bot_username = bot.get_me().username
+                    markup_ch.add(types.InlineKeyboardButton("انضم للحصول على ايميلات جديدة 🔥", url=f"https://t.me/{bot_username}"))
+                except:
+                    pass
+                bot.send_message(LOG_CHANNEL_ID, proof_msg, reply_markup=markup_ch, parse_mode="Markdown")
+
+            # عرض الرسالة الكاملة للمستخدم
             out = f"📬 **رسالة جديدة!**\n✉️ إلى: `{email}`\n\n📌 **الموضوع:** {subject}\n📝 **المحتوى:**\n`{text_body[:500]}`"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🔄 فحص مجدداً", callback_data="check_inbox"))
             markup.add(types.InlineKeyboardButton("🔙 القائمة", callback_data="main_menu"))
             bot.edit_message_text(out, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
     except:
-        bot.answer_callback_query(call.id, "❌ خطأ في الاتصال.")
+        bot.answer_callback_query(call.id, "❌ خطأ في الاتصال بالسيرفر.")
 
-# ==================== 7. شراء Gmail دائم (المدفوع) ====================
+# ==================== 7. شراء Gmail دائم ====================
 @bot.callback_query_handler(func=lambda call: call.data == "buy_gmail")
 def buy_permanent_gmail(call):
     cid = call.message.chat.id
@@ -258,7 +281,6 @@ def buy_permanent_gmail(call):
     if user[2] < GMAIL_PRICE:
         return bot.answer_callback_query(call.id, f"❌ رصيدك لا يكفي. السعر: {GMAIL_PRICE}$", show_alert=True)
     
-    # البحث عن جيميل متاح في المخزون
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, email_pass FROM paid_accounts WHERE is_sold = FALSE LIMIT 1")
@@ -268,96 +290,22 @@ def buy_permanent_gmail(call):
         conn.close()
         return bot.answer_callback_query(call.id, "⚠️ المخزون فارغ حالياً، يرجى المحاولة لاحقاً.", show_alert=True)
     
-    # تنفيذ الشراء
     acc_id, email_pass = acc[0], acc[1]
     cur.execute("UPDATE paid_accounts SET is_sold = TRUE, buyer_id = %s WHERE id = %s", (cid, acc_id))
     cur.execute("UPDATE users SET balance = balance - %s WHERE chat_id = %s", (GMAIL_PRICE, cid))
     conn.commit()
     conn.close()
     
-    # رسالة النجاح
     msg = f"🎉 **تم الشراء بنجاح!**\n\n💎 تفاصيل الحساب (Gmail):\n`{email_pass}`\n\n⚠️ يرجى تغيير كلمة المرور فوراً لتأمين حسابك."
     bot.edit_message_text(msg, cid, call.message.message_id, parse_mode="Markdown")
-    
-    # إشعار القناة
-    markup_ch = types.InlineKeyboardMarkup()
-    markup_ch.add(types.InlineKeyboardButton("🤖 اشتري جيميل دائم", url=f"https://t.me/{bot.get_me().username}"))
-    bot.send_message(LOG_CHANNEL_ID, f"💎 **شراء حساب Gmail دائم!** 🚀\nتم تسليم الحساب بنجاح لعميلنا.", reply_markup=markup_ch, parse_mode="Markdown")
 
-# ==================== 8. نظام الشحن والإيصالات ====================
-@bot.callback_query_handler(func=lambda call: call.data == "deposit_select_amount")
-def deposit_amount_menu(call):
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    for amt in [1, 3, 5, 10]:
-        egp_val = int(amt * USD_EGP_RATE)
-        markup.add(types.InlineKeyboardButton(f"{amt}$ ({egp_val} EGP) 🇪🇬", callback_data=f"dep_amt:{amt}"))
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
-    bot.edit_message_text("💰 **شحن الرصيد**\nاختر الباقة المناسبة:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("dep_amt:"))
-def deposit_method_menu(call):
-    amount = call.data.split(":")[1]
-    egp_val = int(float(amount) * USD_EGP_RATE)
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton(f"Vodafone Cash ({egp_val} EGP) 🇪🇬", callback_data=f"pay_mtd:vodafone:{amount}"),
-        types.InlineKeyboardButton("Binance Pay 🟨", callback_data=f"pay_mtd:binance:{amount}"),
-        types.InlineKeyboardButton("🔙 رجوع", callback_data="deposit_select_amount")
-    )
-    bot.edit_message_text(f"💳 المبلغ: **{amount}$**\nاختر وسيلة الدفع:", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("pay_mtd:"))
-def pay_info_msg(call):
-    parts = call.data.split(":")
-    method, amount_usd = parts[1], parts[2]
-    amount_egp = int(float(amount_usd) * USD_EGP_RATE)
-    
-    msg = ""
-    if method == 'vodafone':
-        msg = f"🇪🇬 **فودافون كاش**\n📱 رقم المحفظة: `{WALLETS['vodafone']}`\n💸 **المطلوب:** `{amount_egp} جنيه`\n⚠️ حول المبلغ كاملاً وأرسل صورة الإيصال هنا."
-    elif method == 'binance':
-        msg = f"🟨 **Binance Pay**\n🆔 Pay ID: `{WALLETS['binance_id']}`\n💰 **المبلغ:** `{amount_usd} USDT`\n📸 أرسل صورة المعاملة هنا."
-
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="deposit_select_amount"))
-    bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-
-@bot.message_handler(content_types=['photo'])
-def handle_receipt(message):
-    cid = message.chat.id
-    bot.forward_message(ADMIN_ID, cid, message.message_id)
-    markup = types.InlineKeyboardMarkup(row_width=3)
-    markup.add(
-        types.InlineKeyboardButton("✅ 1$", callback_data=f"add:{cid}:1"),
-        types.InlineKeyboardButton("✅ 5$", callback_data=f"add:{cid}:5"),
-        types.InlineKeyboardButton("❌ رفض (مبلغ ناقص)", callback_data=f"rej:{cid}:less"),
-        types.InlineKeyboardButton("❌ رفض (إيصال وهمي)", callback_data=f"rej:{cid}:fake")
-    )
-    user = get_user(cid)
-    bot.send_message(ADMIN_ID, f"📩 **إيصال جديد!**\n🆔 الآيدي: `{cid}`\n💰 رصيده: `{user[2]}$`", reply_markup=markup, parse_mode="Markdown")
-    bot.reply_to(message, "✅ **تم الاستلام!** جاري مراجعة الإيصال.")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("add:") or call.data.startswith("rej:"))
-def admin_process_payment(call):
-    if call.from_user.id != ADMIN_ID: return
-    parts = call.data.split(":")
-    action, uid = parts[0], parts[1]
-    
-    if action == "add":
-        val = float(parts[2])
-        update_balance(uid, val)
-        bot.send_message(uid, f"🎉 **تم قبول الشحن!**\n💰 تمت إضافة {val}$ إلى رصيدك.")
-        bot.edit_message_text(f"✅ تم الشحن {val}$ لـ {uid}", call.message.chat.id, call.message.message_id)
-    elif action == "rej":
-        reason = "المبلغ المحول ناقص" if parts[2] == "less" else "الإيصال غير صحيح"
-        bot.send_message(uid, f"❌ **تم رفض طلب الشحن**\n⚠️ السبب: {reason}")
-        bot.edit_message_text(f"❌ تم الرفض لـ {uid}", call.message.chat.id, call.message.message_id)
-
-# ==================== 9. الحساب ولوحة التحكم ====================
+# ==================== 8. الحساب ولوحة التحكم ====================
 @bot.callback_query_handler(func=lambda call: call.data == "invite")
 def invite_link(call):
     cid = call.message.chat.id
-    link = f"https://t.me/{bot.get_me().username}?start={cid}"
+    try: bot_username = bot.get_me().username
+    except: bot_username = "bot"
+    link = f"https://t.me/{bot_username}?start={cid}"
     msg = f"🎁 **اربح {REFERRAL_REWARD}$** لكل صديق يسجل من خلالك!\n🔗 رابطك:\n`{link}`"
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
@@ -377,11 +325,16 @@ def admin_menu_func(call):
     
     conn = get_db_connection()
     cur = conn.cursor()
+    
+    # جلب الإحصائيات المطلوبة
     cur.execute("SELECT COUNT(*) FROM paid_accounts WHERE is_sold = FALSE")
     stock_count = cur.fetchone()[0]
+    
+    cur.execute("SELECT COUNT(*) FROM users")
+    users_count = cur.fetchone()[0]
     conn.close()
     
-    msg = f"👮 **لوحة التحكم**\n📦 مخزون الجيميلات المتاحة للبيع: `{stock_count}`\nاختر إجراء:"
+    msg = f"👮 **لوحة التحكم**\n📦 مخزون الجيميلات المتاحة للبيع: `{stock_count}`\n👥 إجمالي عدد مستخدمي البوت: `{users_count}`\n\nاختر إجراء:"
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("📢 إذاعة", callback_data="adm_broadcast"),
@@ -390,7 +343,6 @@ def admin_menu_func(call):
     )
     bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-# إضافة جيميلات للمخزون
 @bot.callback_query_handler(func=lambda call: call.data == "adm_add_gmail")
 def ask_add_gmail(call):
     msg = bot.send_message(call.message.chat.id, "📦 أرسل بيانات الجيميل (الإيميل والباسورد وأي تفاصيل):")
@@ -404,7 +356,6 @@ def do_add_gmail(message):
     conn.close()
     bot.send_message(ADMIN_ID, "✅ تم إضافة الحساب للمخزون بنجاح وجاهز للبيع.")
 
-# الإذاعة
 @bot.callback_query_handler(func=lambda call: call.data == "adm_broadcast")
 def ask_broadcast(call):
     msg = bot.send_message(call.message.chat.id, "📢 أرسل الرسالة:")
@@ -430,4 +381,4 @@ if __name__ == "__main__":
     t = threading.Thread(target=run_web_server)
     t.start()
     bot.infinity_polling(skip_pending=True)
-    
+            
