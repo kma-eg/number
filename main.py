@@ -15,7 +15,7 @@ from flask import Flask
 BOT_TOKEN = "6058936352:AAFNKPjfj5A4qMYlyE-KPhBx_BUjSNlbYy0"
 ADMIN_ID = 6318333901
 
-# رابط قاعدة البيانات (الرابط ده صح ومظبوط 100% ما تغيروش)
+# رابط قاعدة البيانات (ثابت لم يتم تغييره)
 SUPABASE_URL = "postgresql://postgres.rjialktdutmbuqhaznzu:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 
 # إعدادات القنوات
@@ -28,6 +28,11 @@ LOG_CHANNEL_LINK = "https://t.me/kms_ad"
 # الثوابت المالية
 REFERRAL_REWARD = 0.02  # مكافأة الدعوة (دولار)
 GMAIL_PRICE = 1.0       # سعر الجيميل الدائم (تعدله براحتك)
+
+# Header لمنع حظر الـ API
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+}
 
 # ==================== 2. سيرفر Flask (لـ Render) ====================
 app = Flask(__name__)
@@ -44,7 +49,6 @@ def init_db():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        # جدول المستخدمين
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 chat_id BIGINT PRIMARY KEY, username TEXT,
@@ -52,14 +56,12 @@ def init_db():
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        # جدول سجل الإيميلات المؤقتة
         cur.execute("""
             CREATE TABLE IF NOT EXISTS email_history (
                 id SERIAL PRIMARY KEY, chat_id BIGINT,
                 email TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        # جدول مخزن الإيميلات المدفوعة (التي يضيفها الأدمن)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS paid_accounts (
                 id SERIAL PRIMARY KEY, account_type TEXT,
@@ -95,6 +97,14 @@ def get_user(chat_id):
     conn.close()
     return res
 
+def get_total_users():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users")
+    count = cur.fetchone()[0]
+    conn.close()
+    return count
+
 def update_balance(chat_id, amount):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -119,7 +129,7 @@ def mask_string(s, visible_start=2, visible_end=2):
 @bot.message_handler(commands=['start'])
 def start_msg(message):
     cid = message.chat.id
-    username = message.from_user.username or "NoUser"
+    username = message.from_user.username or "لا يوجد"
     first_name = message.from_user.first_name
     
     args = message.text.split()
@@ -129,17 +139,45 @@ def start_msg(message):
         if ref != cid: referrer_id = ref
 
     status = add_user(cid, username, referrer_id)
+    total_users = get_total_users()
+    
+    user_link = f"[{first_name}](tg://user?id={cid})"
+    
     if status == "NEW":
+        # إشعار مستخدم جديد للأدمن
+        admin_msg = f"👤 **قام مستخدم جديد بالدخول للبوت الخاص بك**\n\n"
+        admin_msg += f"📌 **معلومات العضو:**\n"
+        admin_msg += f"• الاسم: {user_link}\n"
+        admin_msg += f"• اسم المستخدم: @{username}\n"
+        admin_msg += f"• الآيدي: `{cid}`\n\n"
+        admin_msg += f"📊 **إجمالي عدد المحادثات حتى الآن:** {total_users}"
+        try: bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
+        except: pass
+
         if referrer_id != 0:
             update_balance(referrer_id, REFERRAL_REWARD)
             update_balance(cid, REFERRAL_REWARD)
             try: bot.send_message(referrer_id, f"🎉 **دعوة ناجحة!**\nسجل {first_name} وحصلت على {REFERRAL_REWARD}$")
             except: pass
-        bot.send_message(ADMIN_ID, f"👾 **عضو جديد:** {first_name} (`{cid}`)")
-    
-    captcha_code = gen_complex_captcha()
-    user_captchas[cid] = captcha_code
-    bot.send_message(cid, f"🔒 **التحقق البشري**\nاكتب الرموز التالية بدقة (الحروف الكبيرة والصغيرة والرموز):\n\n`{captcha_code}`", parse_mode="Markdown")
+            
+        # إظهار الكابتشا للمستخدم الجديد فقط
+        captcha_code = gen_complex_captcha()
+        user_captchas[cid] = captcha_code
+        bot.send_message(cid, f"🔒 **التحقق البشري**\nاكتب الرموز التالية بدقة (الحروف الكبيرة والصغيرة والرموز):\n\n`{captcha_code}`", parse_mode="Markdown")
+
+    elif status == "EXISTS":
+        # إشعار عودة مستخدم للأدمن
+        admin_msg = f"🔄 **قام مستخدم بإعادة استخدام البوت الخاص بك مرة أخرى.**\n\n"
+        admin_msg += f"📌 **معلومات العضو:**\n"
+        admin_msg += f"• الاسم: {user_link}\n"
+        admin_msg += f"• اسم المستخدم: @{username}\n"
+        admin_msg += f"• الآيدي: `{cid}`\n\n"
+        admin_msg += f"📊 **إجمالي عدد المحادثات حتى الآن:** {total_users}"
+        try: bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
+        except: pass
+        
+        # تجاوز الكابتشا وفتح القائمة فوراً
+        check_sub_and_open_menu(cid)
 
 @bot.message_handler(func=lambda m: m.chat.id in user_captchas)
 def verify_captcha(message):
@@ -194,7 +232,8 @@ def generate_temp_email(call):
 
     bot.edit_message_text("🔄 جاري إنشاء إيميل مؤقت...", cid, call.message.message_id)
     try:
-        r = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1")
+        r = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", headers=HEADERS, timeout=15)
+        if r.status_code != 200: raise Exception(f"API Error {r.status_code}")
         email = r.json()[0]
         
         active_temp_mails[cid] = {'email': email, 'time': current_time}
@@ -210,8 +249,9 @@ def generate_temp_email(call):
         markup.add(types.InlineKeyboardButton("📥 فحص صندوق الوارد", callback_data="check_inbox"))
         markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
         bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-    except:
-        bot.edit_message_text("❌ حدث خطأ في السيرفر، جرب مرة أخرى.", cid, call.message.message_id)
+    except Exception as e:
+        print(f"❌ Error generating email: {e}")
+        bot.edit_message_text(f"❌ حدث خطأ في السيرفر.\nالسبب: `{e}`\nجرب مرة أخرى.", cid, call.message.message_id, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_inbox")
 def check_temp_inbox(call):
@@ -226,7 +266,7 @@ def check_temp_inbox(call):
     login, domain = email.split('@')
     
     try:
-        r = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}")
+        r = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}", headers=HEADERS, timeout=15)
         messages = r.json()
         
         if not messages:
@@ -236,7 +276,7 @@ def check_temp_inbox(call):
             bot.edit_message_text(f"✉️ **صندوق الوارد:** `{email}`\n\n📭 الصندوق فارغ حالياً، انتظر قليلاً ثم حدث.", cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
             msg_id = messages[0]['id']
-            r_msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}")
+            r_msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}", headers=HEADERS, timeout=15)
             msg_data = r_msg.json()
             subject = msg_data.get('subject', 'بدون عنوان')
             text_body = msg_data.get('textBody', 'لا يوجد نص')
@@ -253,8 +293,7 @@ def check_temp_inbox(call):
                 try:
                     bot_username = bot.get_me().username
                     markup_ch.add(types.InlineKeyboardButton("انضم للحصول على ايميلات جديدة 🔥", url=f"https://t.me/{bot_username}"))
-                except:
-                    pass
+                except: pass
                 bot.send_message(LOG_CHANNEL_ID, proof_msg, reply_markup=markup_ch, parse_mode="Markdown")
 
             out = f"📬 **رسالة جديدة!**\n✉️ إلى: `{email}`\n\n📌 **الموضوع:** {subject}\n📝 **المحتوى:**\n`{text_body[:500]}`"
@@ -262,8 +301,8 @@ def check_temp_inbox(call):
             markup.add(types.InlineKeyboardButton("🔄 فحص مجدداً", callback_data="check_inbox"))
             markup.add(types.InlineKeyboardButton("🔙 القائمة", callback_data="main_menu"))
             bot.edit_message_text(out, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-    except:
-        bot.answer_callback_query(call.id, "❌ خطأ في الاتصال بالسيرفر.")
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"❌ خطأ في الاتصال: {e}", show_alert=True)
 
 # ==================== 7. شراء Gmail دائم ====================
 @bot.callback_query_handler(func=lambda call: call.data == "buy_gmail")
@@ -289,8 +328,23 @@ def buy_permanent_gmail(call):
     conn.commit()
     conn.close()
     
+    # رسالة للمستخدم
     msg = f"🎉 **تم الشراء بنجاح!**\n\n💎 تفاصيل الحساب (Gmail):\n`{email_pass}`\n\n⚠️ يرجى تغيير كلمة المرور فوراً لتأمين حسابك."
     bot.edit_message_text(msg, cid, call.message.message_id, parse_mode="Markdown")
+    
+    # إرسال إشعار جذاب للقناة لتشجيع الأعضاء
+    try:
+        ch_msg = f"🛒 **عملية شراء جديدة!**\n\n"
+        ch_msg += f"👤 قام أحد المستخدمين بشراء حساب Gmail دائم بنجاح 💎\n\n"
+        ch_msg += "✨ البوت الأفضل والأسرع لخدمات الإيميلات 🚀"
+
+        markup_ch = types.InlineKeyboardMarkup()
+        bot_username = bot.get_me().username
+        markup_ch.add(types.InlineKeyboardButton("احصل على إيميل مؤقت مجاناً 🆓", url=f"https://t.me/{bot_username}"))
+        markup_ch.add(types.InlineKeyboardButton("شراء Gmail دائم 💎", url=f"https://t.me/{bot_username}"))
+        
+        bot.send_message(LOG_CHANNEL_ID, ch_msg, reply_markup=markup_ch, parse_mode="Markdown")
+    except: pass
 
 # ==================== 8. الحساب ولوحة التحكم ====================
 @bot.callback_query_handler(func=lambda call: call.data == "invite")
@@ -318,27 +372,20 @@ def admin_menu_func(call):
     
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    # جلب الإحصائيات المطلوبة
     cur.execute("SELECT COUNT(*) FROM paid_accounts WHERE is_sold = FALSE")
     stock_count = cur.fetchone()[0]
     
-    cur.execute("SELECT COUNT(*) FROM users")
-    users_count = cur.fetchone()[0]
+    users_count = get_total_users()
     
-    # جلب أكثر المستخدمين سحباً للإيميلات (أعلى 10)
     cur.execute("SELECT chat_id, COUNT(*) as mail_count FROM email_history GROUP BY chat_id ORDER BY mail_count DESC LIMIT 10")
     top_users = cur.fetchall()
-    
     conn.close()
     
-    # تجميع نص أكثر المستخدمين (وخليت الأيدي نص مش رابط)
     top_text = ""
     if top_users:
         for idx, u in enumerate(top_users, 1):
             top_text += f"{idx}- أيدي: `{u[0]}` | استخرج: **{u[1]}** إيميل\n"
-    else:
-        top_text = "لا يوجد بيانات بعد.\n"
+    else: top_text = "لا يوجد بيانات بعد.\n"
     
     msg = f"👮 **لوحة التحكم**\n"
     msg += f"👥 إجمالي المنضمين للبوت: `{users_count}` مستخدم\n"
@@ -393,11 +440,8 @@ if __name__ == "__main__":
     t.start()
     
     print("🤖 Bot is starting...")
-    # حلقة لانهائية عشان لو البوت فصل يرجع يشتغل لوحده بعد 5 ثواني
     while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
+        try: bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception as e:
             print(f"❌ خطأ في الاتصال، جاري إعادة التشغيل: {e}")
             time.sleep(5)
-        
