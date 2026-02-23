@@ -15,7 +15,7 @@ from flask import Flask
 BOT_TOKEN = "6058936352:AAFNKPjfj5A4qMYlyE-KPhBx_BUjSNlbYy0"
 ADMIN_ID = 6318333901
 
-# رابط قاعدة البيانات
+# رابط قاعدة البيانات (الرابط ده صح ومظبوط 100% ما تغيروش)
 SUPABASE_URL = "postgresql://postgres.rjialktdutmbuqhaznzu:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 
 # إعدادات القنوات
@@ -105,7 +105,7 @@ def update_balance(chat_id, amount):
 # ==================== 4. كابتشا وتشفير الإثباتات ====================
 bot = telebot.TeleBot(BOT_TOKEN)
 user_captchas = {}
-active_temp_mails = {} # لتخزين الإيميل المؤقت النشط والوقت لكل مستخدم
+active_temp_mails = {}
 
 def gen_complex_captcha():
     chars = string.ascii_letters + string.digits + "@#$&*?!"
@@ -185,11 +185,10 @@ def generate_temp_email(call):
     cid = call.message.chat.id
     current_time = time.time()
     
-    # التحقق من مرور 15 دقيقة
     if cid in active_temp_mails:
         last_gen_time = active_temp_mails[cid].get('time', 0)
         time_diff = current_time - last_gen_time
-        if time_diff < 900:  # 900 ثانية = 15 دقيقة
+        if time_diff < 900:
             mins_left = int((900 - time_diff) // 60)
             return bot.answer_callback_query(call.id, f"⏳ الإيميل المؤقت صالح لمدة 15 دقيقة. يرجى الانتظار {mins_left} دقيقة لتوليد إيميل جديد.", show_alert=True)
 
@@ -198,17 +197,14 @@ def generate_temp_email(call):
         r = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1")
         email = r.json()[0]
         
-        # حفظ الإيميل والوقت
         active_temp_mails[cid] = {'email': email, 'time': current_time}
         
-        # حفظ في قاعدة البيانات (السجل)
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("INSERT INTO email_history (chat_id, email) VALUES (%s, %s)", (cid, email))
         conn.commit()
         conn.close()
 
-        # رسالة للمستخدم
         msg = f"✅ **تم إنشاء الإيميل المؤقت بنجاح!**\n\n✉️ الإيميل:\n`{email}`\n\n⚠️ صالح لمدة 15 دقيقة، استخدمه للتسجيل ثم اضغط (صندوق الوارد)."
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📥 فحص صندوق الوارد", callback_data="check_inbox"))
@@ -245,11 +241,9 @@ def check_temp_inbox(call):
             subject = msg_data.get('subject', 'بدون عنوان')
             text_body = msg_data.get('textBody', 'لا يوجد نص')
             
-            # محاولة استخراج كود التفعيل للإثباتات
             code_match = re.search(r'\b\d{4,6}\b', text_body)
             code = code_match.group(0) if code_match else None
             
-            # إرسال إثبات مشفر للقناة إذا تم العثور على كود
             if code:
                 masked_email = mask_string(login, 2, 1) + "@" + domain
                 masked_code = mask_string(code, 1, 1)
@@ -263,7 +257,6 @@ def check_temp_inbox(call):
                     pass
                 bot.send_message(LOG_CHANNEL_ID, proof_msg, reply_markup=markup_ch, parse_mode="Markdown")
 
-            # عرض الرسالة الكاملة للمستخدم
             out = f"📬 **رسالة جديدة!**\n✉️ إلى: `{email}`\n\n📌 **الموضوع:** {subject}\n📝 **المحتوى:**\n`{text_body[:500]}`"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🔄 فحص مجدداً", callback_data="check_inbox"))
@@ -332,9 +325,27 @@ def admin_menu_func(call):
     
     cur.execute("SELECT COUNT(*) FROM users")
     users_count = cur.fetchone()[0]
+    
+    # جلب أكثر المستخدمين سحباً للإيميلات (أعلى 10)
+    cur.execute("SELECT chat_id, COUNT(*) as mail_count FROM email_history GROUP BY chat_id ORDER BY mail_count DESC LIMIT 10")
+    top_users = cur.fetchall()
+    
     conn.close()
     
-    msg = f"👮 **لوحة التحكم**\n📦 مخزون الجيميلات المتاحة للبيع: `{stock_count}`\n👥 إجمالي عدد مستخدمي البوت: `{users_count}`\n\nاختر إجراء:"
+    # تجميع نص أكثر المستخدمين (وخليت الأيدي نص مش رابط)
+    top_text = ""
+    if top_users:
+        for idx, u in enumerate(top_users, 1):
+            top_text += f"{idx}- أيدي: `{u[0]}` | استخرج: **{u[1]}** إيميل\n"
+    else:
+        top_text = "لا يوجد بيانات بعد.\n"
+    
+    msg = f"👮 **لوحة التحكم**\n"
+    msg += f"👥 إجمالي المنضمين للبوت: `{users_count}` مستخدم\n"
+    msg += f"📦 مخزون الجيميلات المتاحة: `{stock_count}`\n\n"
+    msg += f"🏆 **أكثر المستخدمين استخراجاً للإيميلات:**\n{top_text}\n"
+    msg += "اختر إجراء:"
+    
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("📢 إذاعة", callback_data="adm_broadcast"),
@@ -380,5 +391,13 @@ if __name__ == "__main__":
     init_db()
     t = threading.Thread(target=run_web_server)
     t.start()
-    bot.infinity_polling(skip_pending=True)
-            
+    
+    print("🤖 Bot is starting...")
+    # حلقة لانهائية عشان لو البوت فصل يرجع يشتغل لوحده بعد 5 ثواني
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            print(f"❌ خطأ في الاتصال، جاري إعادة التشغيل: {e}")
+            time.sleep(5)
+        
