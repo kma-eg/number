@@ -15,24 +15,16 @@ from flask import Flask
 BOT_TOKEN = "6058936352:AAFNKPjfj5A4qMYlyE-KPhBx_BUjSNlbYy0"
 ADMIN_ID = 6318333901
 
-# رابط قاعدة البيانات (ثابت لم يتم تغييره)
 SUPABASE_URL = "postgresql://postgres.rjialktdutmbuqhaznzu:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 
-# إعدادات القنوات
-SUB_CHANNEL_ID = -1003316907453       # قناة الاشتراك الإجباري
+SUB_CHANNEL_ID = -1003316907453       
 SUB_CHANNEL_LINK = "https://t.me/kma_c"
 
-LOG_CHANNEL_ID = -1003709813767       # قناة التفعيلات (الإثباتات)
+LOG_CHANNEL_ID = -1003709813767       
 LOG_CHANNEL_LINK = "https://t.me/kms_ad"
 
-# الثوابت المالية
-REFERRAL_REWARD = 0.02  # مكافأة الدعوة (دولار)
-GMAIL_PRICE = 1.0       # سعر الجيميل الدائم (تعدله براحتك)
-
-# Header لمنع حظر الـ API
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-}
+REFERRAL_REWARD = 0.02  
+GMAIL_PRICE = 1.0       
 
 # ==================== 2. سيرفر Flask (لـ Render) ====================
 app = Flask(__name__)
@@ -105,17 +97,13 @@ def get_total_users():
     conn.close()
     return count
 
-def update_balance(chat_id, amount):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET balance = balance + %s WHERE chat_id = %s", (amount, chat_id))
-    conn.commit()
-    conn.close()
-
-# ==================== 4. كابتشا وتشفير الإثباتات ====================
+# ==================== 4. المتغيرات والذاكرة المؤقتة ====================
 bot = telebot.TeleBot(BOT_TOKEN)
 user_captchas = {}
 active_temp_mails = {}
+
+# قاموس لتسجيل وقت آخر إشعار "إعادة استخدام" لكل مستخدم (عشان ميزعجكش)
+admin_notifications_cooldown = {}
 
 def gen_complex_captcha():
     chars = string.ascii_letters + string.digits + "@#$&*?!"
@@ -140,43 +128,41 @@ def start_msg(message):
 
     status = add_user(cid, username, referrer_id)
     total_users = get_total_users()
-    
     user_link = f"[{first_name}](tg://user?id={cid})"
+    current_time = time.time()
     
     if status == "NEW":
-        # إشعار مستخدم جديد للأدمن
         admin_msg = f"👤 **قام مستخدم جديد بالدخول للبوت الخاص بك**\n\n"
-        admin_msg += f"📌 **معلومات العضو:**\n"
-        admin_msg += f"• الاسم: {user_link}\n"
-        admin_msg += f"• اسم المستخدم: @{username}\n"
-        admin_msg += f"• الآيدي: `{cid}`\n\n"
+        admin_msg += f"📌 **معلومات العضو:**\n• الاسم: {user_link}\n• اسم المستخدم: @{username}\n• الآيدي: `{cid}`\n\n"
         admin_msg += f"📊 **إجمالي عدد المحادثات حتى الآن:** {total_users}"
         try: bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
         except: pass
 
         if referrer_id != 0:
-            update_balance(referrer_id, REFERRAL_REWARD)
-            update_balance(cid, REFERRAL_REWARD)
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET balance = balance + %s WHERE chat_id IN (%s, %s)", (REFERRAL_REWARD, referrer_id, cid))
+            conn.commit()
+            conn.close()
             try: bot.send_message(referrer_id, f"🎉 **دعوة ناجحة!**\nسجل {first_name} وحصلت على {REFERRAL_REWARD}$")
             except: pass
             
-        # إظهار الكابتشا للمستخدم الجديد فقط
         captcha_code = gen_complex_captcha()
         user_captchas[cid] = captcha_code
         bot.send_message(cid, f"🔒 **التحقق البشري**\nاكتب الرموز التالية بدقة (الحروف الكبيرة والصغيرة والرموز):\n\n`{captcha_code}`", parse_mode="Markdown")
 
     elif status == "EXISTS":
-        # إشعار عودة مستخدم للأدمن
-        admin_msg = f"🔄 **قام مستخدم بإعادة استخدام البوت الخاص بك مرة أخرى.**\n\n"
-        admin_msg += f"📌 **معلومات العضو:**\n"
-        admin_msg += f"• الاسم: {user_link}\n"
-        admin_msg += f"• اسم المستخدم: @{username}\n"
-        admin_msg += f"• الآيدي: `{cid}`\n\n"
-        admin_msg += f"📊 **إجمالي عدد المحادثات حتى الآن:** {total_users}"
-        try: bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
-        except: pass
-        
-        # تجاوز الكابتشا وفتح القائمة فوراً
+        # التحقق من الـ Cooldown (10 أيام = 864000 ثانية)
+        last_notified = admin_notifications_cooldown.get(cid, 0)
+        if (current_time - last_notified) > 864000:
+            admin_msg = f"🔄 **مستخدم قديم عاد لاستخدام البوت.**\n\n"
+            admin_msg += f"📌 **معلومات العضو:**\n• الاسم: {user_link}\n• اسم المستخدم: @{username}\n• الآيدي: `{cid}`\n\n"
+            admin_msg += f"📊 **إجمالي عدد المحادثات حتى الآن:** {total_users}"
+            try: bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
+            except: pass
+            # تحديث وقت آخر إشعار
+            admin_notifications_cooldown[cid] = current_time
+            
         check_sub_and_open_menu(cid)
 
 @bot.message_handler(func=lambda m: m.chat.id in user_captchas)
@@ -217,7 +203,7 @@ def main_menu(cid):
     if cid == ADMIN_ID: markup.add(types.InlineKeyboardButton("👮 لوحة الأدمن", callback_data="admin_panel"))
     bot.send_message(cid, f"👋 **أهلاً بك في بوت الخدمات الذكية!**\n💰 رصيدك: `{balance:.2f}$`\nاختر من القائمة:", reply_markup=markup, parse_mode="Markdown")
 
-# ==================== 6. الإيميلات المؤقتة (15 دقيقة) ====================
+# ==================== 6. الإيميلات المؤقتة (API جديد قوي Mail.gw) ====================
 @bot.callback_query_handler(func=lambda call: call.data == "gen_temp")
 def generate_temp_email(call):
     cid = call.message.chat.id
@@ -228,30 +214,40 @@ def generate_temp_email(call):
         time_diff = current_time - last_gen_time
         if time_diff < 900:
             mins_left = int((900 - time_diff) // 60)
-            return bot.answer_callback_query(call.id, f"⏳ الإيميل المؤقت صالح لمدة 15 دقيقة. يرجى الانتظار {mins_left} دقيقة لتوليد إيميل جديد.", show_alert=True)
+            return bot.answer_callback_query(call.id, f"⏳ الإيميل المؤقت صالح لمدة 15 دقيقة. يرجى الانتظار {mins_left} دقيقة.", show_alert=True)
 
-    bot.edit_message_text("🔄 جاري إنشاء إيميل مؤقت...", cid, call.message.message_id)
+    bot.edit_message_text("🔄 جاري إنشاء إيميل مؤقت وتجهيز السيرفرات...", cid, call.message.message_id)
     try:
-        r = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", headers=HEADERS, timeout=15)
-        if r.status_code != 200: raise Exception(f"API Error {r.status_code}")
-        email = r.json()[0]
+        # جلب الدومينات المتاحة
+        domains = requests.get("https://api.mail.gw/domains").json()
+        domain = domains['hydra:member'][0]['domain']
         
-        active_temp_mails[cid] = {'email': email, 'time': current_time}
+        # إنشاء إيميل وباسورد عشوائي
+        address = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10)) + "@" + domain
+        password = "BotSecurePass123!"
+        
+        # تسجيل الحساب في الموقع
+        requests.post("https://api.mail.gw/accounts", json={"address": address, "password": password})
+        
+        # جلب التوكن (مفتاح الدخول للصندوق)
+        token_req = requests.post("https://api.mail.gw/token", json={"address": address, "password": password})
+        token = token_req.json()['token']
+        
+        active_temp_mails[cid] = {'email': address, 'token': token, 'time': current_time}
         
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO email_history (chat_id, email) VALUES (%s, %s)", (cid, email))
+        cur.execute("INSERT INTO email_history (chat_id, email) VALUES (%s, %s)", (cid, address))
         conn.commit()
         conn.close()
 
-        msg = f"✅ **تم إنشاء الإيميل المؤقت بنجاح!**\n\n✉️ الإيميل:\n`{email}`\n\n⚠️ صالح لمدة 15 دقيقة، استخدمه للتسجيل ثم اضغط (صندوق الوارد)."
+        msg = f"✅ **تم إنشاء الإيميل بنجاح!**\n\n✉️ الإيميل:\n`{address}`\n\n⚠️ صالح لمدة 15 دقيقة، استخدمه للتسجيل ثم اضغط (صندوق الوارد)."
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("📥 فحص صندوق الوارد", callback_data="check_inbox"))
         markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="main_menu"))
         bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
     except Exception as e:
-        print(f"❌ Error generating email: {e}")
-        bot.edit_message_text(f"❌ حدث خطأ في السيرفر.\nالسبب: `{e}`\nجرب مرة أخرى.", cid, call.message.message_id, parse_mode="Markdown")
+        bot.edit_message_text(f"❌ حدث ضغط على السيرفر، يرجى المحاولة بعد قليل.", cid, call.message.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_inbox")
 def check_temp_inbox(call):
@@ -262,29 +258,31 @@ def check_temp_inbox(call):
         return bot.answer_callback_query(call.id, "❌ لم تقم بإنشاء إيميل مؤقت بعد!", show_alert=True)
     
     email = temp_data['email']
-    bot.answer_callback_query(call.id, "🔄 جاري تحديث الصندوق...")
-    login, domain = email.split('@')
+    token = temp_data['token']
+    bot.answer_callback_query(call.id, "🔄 جاري فحص الصندوق...")
     
     try:
-        r = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}", headers=HEADERS, timeout=15)
-        messages = r.json()
+        headers = {"Authorization": f"Bearer {token}"}
+        r = requests.get("https://api.mail.gw/messages", headers=headers)
+        messages = r.json().get('hydra:member', [])
         
         if not messages:
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🔄 تحديث", callback_data="check_inbox"))
+            markup.add(types.InlineKeyboardButton("🔄 تحديث الصندوق", callback_data="check_inbox"))
             markup.add(types.InlineKeyboardButton("🔙 القائمة", callback_data="main_menu"))
-            bot.edit_message_text(f"✉️ **صندوق الوارد:** `{email}`\n\n📭 الصندوق فارغ حالياً، انتظر قليلاً ثم حدث.", cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            bot.edit_message_text(f"✉️ **الصندوق:** `{email}`\n\n📭 الصندوق فارغ حالياً، انتظر قليلاً ثم حدث.", cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
             msg_id = messages[0]['id']
-            r_msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}", headers=HEADERS, timeout=15)
+            r_msg = requests.get(f"https://api.mail.gw/messages/{msg_id}", headers=headers)
             msg_data = r_msg.json()
             subject = msg_data.get('subject', 'بدون عنوان')
-            text_body = msg_data.get('textBody', 'لا يوجد نص')
+            text_body = msg_data.get('text', 'لا يوجد نص')
             
             code_match = re.search(r'\b\d{4,6}\b', text_body)
             code = code_match.group(0) if code_match else None
             
             if code:
+                login, domain = email.split('@')
                 masked_email = mask_string(login, 2, 1) + "@" + domain
                 masked_code = mask_string(code, 1, 1)
                 
@@ -292,7 +290,7 @@ def check_temp_inbox(call):
                 markup_ch = types.InlineKeyboardMarkup()
                 try:
                     bot_username = bot.get_me().username
-                    markup_ch.add(types.InlineKeyboardButton("انضم للحصول على ايميلات جديدة 🔥", url=f"https://t.me/{bot_username}"))
+                    markup_ch.add(types.InlineKeyboardButton("احصل على إيميلات وتفعيلات مجاناً 🔥", url=f"https://t.me/{bot_username}"))
                 except: pass
                 bot.send_message(LOG_CHANNEL_ID, proof_msg, reply_markup=markup_ch, parse_mode="Markdown")
 
@@ -302,16 +300,47 @@ def check_temp_inbox(call):
             markup.add(types.InlineKeyboardButton("🔙 القائمة", callback_data="main_menu"))
             bot.edit_message_text(out, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
     except Exception as e:
-        bot.answer_callback_query(call.id, f"❌ خطأ في الاتصال: {e}", show_alert=True)
+        bot.answer_callback_query(call.id, f"❌ خطأ في الاتصال بالبريد.", show_alert=True)
 
-# ==================== 7. شراء Gmail دائم ====================
+# ==================== 7. شراء Gmail (مع نظام التأكيد والدوامة) ====================
 @bot.callback_query_handler(func=lambda call: call.data == "buy_gmail")
-def buy_permanent_gmail(call):
+def buy_gmail_request(call):
     cid = call.message.chat.id
     user = get_user(cid)
     
     if user[2] < GMAIL_PRICE:
-        return bot.answer_callback_query(call.id, f"❌ رصيدك لا يكفي. السعر: {GMAIL_PRICE}$", show_alert=True)
+        return bot.answer_callback_query(call.id, f"❌ رصيدك لا يكفي لإتمام العملية. السعر: {GMAIL_PRICE}$", show_alert=True)
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM paid_accounts WHERE is_sold = FALSE LIMIT 1")
+    acc = cur.fetchone()
+    conn.close()
+    
+    if not acc:
+        return bot.answer_callback_query(call.id, "⚠️ المخزون فارغ حالياً، تواصل مع الإدارة أو جرب لاحقاً.", show_alert=True)
+    
+    # رسالة التأكيد (مفيش خصم فلوس لسه)
+    msg = f"⚠️ **مراجعة وتأكيد الطلب**\n\n"
+    msg += f"📦 **المنتج:** حساب Gmail (دائم ومفعل)\n"
+    msg += f"💵 **السعر:** `{GMAIL_PRICE}$`\n"
+    msg += f"💰 **رصيدك الحالي:** `{user[2]:.2f}$`\n\n"
+    msg += "هل أنت متأكد من رغبتك في إتمام عملية الشراء واستلام الحساب؟"
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("✅ تأكيد وخصم الرصيد", callback_data="confirm_buy_gmail"),
+        types.InlineKeyboardButton("❌ إلغاء العملية", callback_data="main_menu")
+    )
+    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data == "confirm_buy_gmail")
+def confirm_buy_permanent_gmail(call):
+    cid = call.message.chat.id
+    user = get_user(cid)
+    
+    if user[2] < GMAIL_PRICE:
+        return bot.answer_callback_query(call.id, "❌ رصيدك غير كافٍ.", show_alert=True)
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -320,29 +349,25 @@ def buy_permanent_gmail(call):
     
     if not acc:
         conn.close()
-        return bot.answer_callback_query(call.id, "⚠️ المخزون فارغ حالياً، يرجى المحاولة لاحقاً.", show_alert=True)
+        return bot.answer_callback_query(call.id, "⚠️ نأسف، نفد المخزون أثناء تأكيد طلبك.", show_alert=True)
     
+    # هنا بس بيتم الشراء وخصم الفلوس
     acc_id, email_pass = acc[0], acc[1]
     cur.execute("UPDATE paid_accounts SET is_sold = TRUE, buyer_id = %s WHERE id = %s", (cid, acc_id))
     cur.execute("UPDATE users SET balance = balance - %s WHERE chat_id = %s", (GMAIL_PRICE, cid))
     conn.commit()
     conn.close()
     
-    # رسالة للمستخدم
-    msg = f"🎉 **تم الشراء بنجاح!**\n\n💎 تفاصيل الحساب (Gmail):\n`{email_pass}`\n\n⚠️ يرجى تغيير كلمة المرور فوراً لتأمين حسابك."
-    bot.edit_message_text(msg, cid, call.message.message_id, parse_mode="Markdown")
+    msg = f"🎉 **تمت عملية الشراء بنجاح!**\n\n💎 تفاصيل الحساب (Gmail):\n`{email_pass}`\n\n⚠️ يرجى تغيير كلمة المرور فوراً لتأمين حسابك."
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 العودة للقائمة", callback_data="main_menu"))
+    bot.edit_message_text(msg, cid, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
     
-    # إرسال إشعار جذاب للقناة لتشجيع الأعضاء
     try:
-        ch_msg = f"🛒 **عملية شراء جديدة!**\n\n"
-        ch_msg += f"👤 قام أحد المستخدمين بشراء حساب Gmail دائم بنجاح 💎\n\n"
-        ch_msg += "✨ البوت الأفضل والأسرع لخدمات الإيميلات 🚀"
-
+        ch_msg = f"🛒 **عملية شراء جديدة!**\n\n👤 قام أحد عملائنا بشراء حساب Gmail دائم بنجاح 💎\n\n✨ انضم الآن واستفد من خدماتنا المضمونة 🚀"
         markup_ch = types.InlineKeyboardMarkup()
         bot_username = bot.get_me().username
-        markup_ch.add(types.InlineKeyboardButton("احصل على إيميل مؤقت مجاناً 🆓", url=f"https://t.me/{bot_username}"))
-        markup_ch.add(types.InlineKeyboardButton("شراء Gmail دائم 💎", url=f"https://t.me/{bot_username}"))
-        
+        markup_ch.add(types.InlineKeyboardButton("شراء حسابك الآن 🛒", url=f"https://t.me/{bot_username}"))
         bot.send_message(LOG_CHANNEL_ID, ch_msg, reply_markup=markup_ch, parse_mode="Markdown")
     except: pass
 
@@ -374,24 +399,17 @@ def admin_menu_func(call):
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM paid_accounts WHERE is_sold = FALSE")
     stock_count = cur.fetchone()[0]
-    
     users_count = get_total_users()
-    
     cur.execute("SELECT chat_id, COUNT(*) as mail_count FROM email_history GROUP BY chat_id ORDER BY mail_count DESC LIMIT 10")
     top_users = cur.fetchall()
     conn.close()
     
     top_text = ""
     if top_users:
-        for idx, u in enumerate(top_users, 1):
-            top_text += f"{idx}- أيدي: `{u[0]}` | استخرج: **{u[1]}** إيميل\n"
+        for idx, u in enumerate(top_users, 1): top_text += f"{idx}- أيدي: `{u[0]}` | استخرج: **{u[1]}** إيميل\n"
     else: top_text = "لا يوجد بيانات بعد.\n"
     
-    msg = f"👮 **لوحة التحكم**\n"
-    msg += f"👥 إجمالي المنضمين للبوت: `{users_count}` مستخدم\n"
-    msg += f"📦 مخزون الجيميلات المتاحة: `{stock_count}`\n\n"
-    msg += f"🏆 **أكثر المستخدمين استخراجاً للإيميلات:**\n{top_text}\n"
-    msg += "اختر إجراء:"
+    msg = f"👮 **لوحة التحكم**\n👥 إجمالي المنضمين للبوت: `{users_count}` مستخدم\n📦 مخزون الجيميلات: `{stock_count}`\n\n🏆 **أكثر المستخدمين استخراجاً:**\n{top_text}\nاختر إجراء:"
     
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -412,7 +430,7 @@ def do_add_gmail(message):
     cur.execute("INSERT INTO paid_accounts (account_type, email_pass) VALUES ('GMAIL', %s)", (message.text,))
     conn.commit()
     conn.close()
-    bot.send_message(ADMIN_ID, "✅ تم إضافة الحساب للمخزون بنجاح وجاهز للبيع.")
+    bot.send_message(ADMIN_ID, "✅ تم إضافة الحساب للمخزون بنجاح.")
 
 @bot.callback_query_handler(func=lambda call: call.data == "adm_broadcast")
 def ask_broadcast(call):
@@ -428,20 +446,3 @@ def do_broadcast(message):
     for u in users:
         try: bot.copy_message(u[0], message.chat.id, message.message_id)
         except: pass
-    bot.send_message(ADMIN_ID, "✅ تمت الإذاعة.")
-
-@bot.callback_query_handler(func=lambda call: call.data == "main_menu")
-def back_main(call): main_menu(call.message.chat.id)
-
-# ==================== التشغيل ====================
-if __name__ == "__main__":
-    init_db()
-    t = threading.Thread(target=run_web_server)
-    t.start()
-    
-    print("🤖 Bot is starting...")
-    while True:
-        try: bot.polling(none_stop=True, interval=0, timeout=20)
-        except Exception as e:
-            print(f"❌ خطأ في الاتصال، جاري إعادة التشغيل: {e}")
-            time.sleep(5)
