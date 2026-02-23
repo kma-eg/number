@@ -12,7 +12,7 @@ import re
 from flask import Flask
 
 # ==================== 1. إعدادات البوت والمفاتيح ====================
-BOT_TOKEN = "ضع_التوكن_الجديد_هنا" # <--- غير ده بالتوكن الجديد من BotFather
+BOT_TOKEN = "6058936352:AAFvNBQbQLjADFlBA1Is-IDQu3Au52BYyGo" # <--- غير ده بالتوكن الجديد من BotFather
 ADMIN_ID = 6318333901
 
 SUPABASE_URL = "postgresql://postgres.rjialktdutmbuqhaznzu:5455%40Kma01020755609@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
